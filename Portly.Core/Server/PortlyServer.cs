@@ -43,15 +43,18 @@ namespace Portly.Core.Server
             _listener.Start();
             Console.WriteLine($"Server started on port \'{_port}\'.");
 
-            try
+            _ = Task.Run(async () =>
             {
-                while (!_cts.Token.IsCancellationRequested)
+                try
                 {
-                    var client = await _listener.AcceptTcpClientAsync(_cts.Token);
-                    _ = HandleClientAsync(client, _cts.Token);
+                    while (!_cts.Token.IsCancellationRequested)
+                    {
+                        var client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                        _ = HandleClientAsync(client, _cts.Token);
+                    }
                 }
-            }
-            catch (OperationCanceledException) { }
+                catch (OperationCanceledException) { }
+            });
         }
 
         public async Task StopAsync()
@@ -66,7 +69,7 @@ namespace Portly.Core.Server
                 // Send disconnection packet before cancel
                 await connection.SendPacketAsync(new Packet
                 {
-                    Type = PacketType.Disconnect,
+                    Identifier = new(PacketType.Disconnect),
                     Payload = []
                 });
                 connection.Cancellation.Cancel();
@@ -137,7 +140,7 @@ namespace Portly.Core.Server
                             PacketHandler.ReadPacketsAsync(connection.Stream, async packet =>
                             {
                                 connection.LastReceived = DateTime.UtcNow;
-                                if (packet.Type != PacketType.Heartbeat)
+                                if (packet.Identifier.Id != (int)PacketType.Heartbeat)
                                     await HandlePacketAsync(connection, packet);
                             }, linkedCts.Token),
                             HeartbeatLoop(connection, linkedCts.Token)
@@ -171,19 +174,19 @@ namespace Portly.Core.Server
 
             await connection.SendPacketAsync(new Packet
             {
-                Type = PacketType.Handshake,
+                Identifier = new(PacketType.Handshake),
                 Payload = publicKey
             });
 
             var challengePacket = await PacketHandler.ReceiveSinglePacketAsync(connection.Stream);
-            if (challengePacket.Type != PacketType.Handshake || challengePacket.Payload == null)
+            if (challengePacket.Identifier.Id != (int)PacketType.Handshake || challengePacket.Payload == null)
                 return false;
 
             var signature = _trustServer.SignChallenge(challengePacket.Payload);
 
             await connection.SendPacketAsync(new Packet
             {
-                Type = PacketType.Handshake,
+                Identifier = new(PacketType.Handshake),
                 Payload = signature
             });
 
@@ -205,7 +208,7 @@ namespace Portly.Core.Server
                     {
                         await connection.SendPacketAsync(new Packet
                         {
-                            Type = PacketType.Heartbeat,
+                            Identifier = new(PacketType.Heartbeat),
                             Payload = []
                         });
 
@@ -229,13 +232,11 @@ namespace Portly.Core.Server
 
         private static async Task HandlePacketAsync(ClientConnection connection, Packet packet)
         {
-            switch (packet.Type)
+            // Handle system packets
+            switch (packet.Identifier.Id)
             {
-                case PacketType.Disconnect:
+                case (int)PacketType.Disconnect:
                     connection.Disconnect();
-                    break;
-                default:
-                    Console.WriteLine($"[{connection.Client.Client.RemoteEndPoint}]: Received '{packet.Type}' packet.");
                     break;
             }
 

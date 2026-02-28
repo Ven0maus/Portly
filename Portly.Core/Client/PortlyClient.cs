@@ -64,9 +64,9 @@ namespace Portly.Core.Client
                 {
                     _lastReceived = DateTime.UtcNow;
 
-                    if (packet.Type == PacketType.Heartbeat)
+                    if (packet.Identifier.Id == (int)PacketType.Heartbeat)
                         return;
-                    if (packet.Type == PacketType.Disconnect)
+                    if (packet.Identifier.Id == (int)PacketType.Disconnect)
                     {
                         await DisconnectInternalAsync(false);
                         return;
@@ -139,7 +139,7 @@ namespace Portly.Core.Client
                 {
                     var disconnectPacket = new Packet
                     {
-                        Type = PacketType.Disconnect,
+                        Identifier = new(PacketType.Disconnect),
                         Payload = []
                     };
 
@@ -183,8 +183,8 @@ namespace Portly.Core.Client
             var publicKeyPacket = await PacketHandler.ReceiveSinglePacketAsync(stream);
             var publicKey = publicKeyPacket.Payload;
 
-            if (publicKeyPacket.Type != PacketType.Handshake || publicKey == null)
-                throw new Exception("Invalid handshake packet.");
+            if (publicKeyPacket.Identifier.Id != (int)PacketType.Handshake || publicKey == null)
+                throw new Exception("Invalid handshake packet: " + publicKeyPacket.Identifier.Id);
 
             if (!_trustClient.VerifyOrTrustServer(host, port, publicKey))
                 throw new Exception("Server identity verification failed.");
@@ -194,7 +194,7 @@ namespace Portly.Core.Client
 
             await SendPacketInternalAsync(stream, new Packet
             {
-                Type = PacketType.Handshake,
+                Identifier = new(PacketType.Handshake),
                 Payload = challenge
             });
 
@@ -202,7 +202,7 @@ namespace Portly.Core.Client
             var responsePacket = await PacketHandler.ReceiveSinglePacketAsync(stream);
             var signature = responsePacket.Payload;
 
-            if (responsePacket.Type != PacketType.Handshake || signature == null)
+            if (responsePacket.Identifier.Id != (int)PacketType.Handshake || signature == null)
                 throw new Exception("Invalid handshake response.");
 
             // 4. Verify signature
@@ -231,7 +231,7 @@ namespace Portly.Core.Client
                     {
                         await SendPacketAsync(new Packet
                         {
-                            Type = PacketType.Heartbeat,
+                            Identifier = new(PacketType.Heartbeat),
                             Payload = []
                         });
 

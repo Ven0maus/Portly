@@ -1,7 +1,7 @@
-﻿using System.Buffers;
+﻿using MessagePack;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace Portly.Core.PacketHandling
 {
@@ -11,40 +11,47 @@ namespace Portly.Core.PacketHandling
     public static class PacketHandler
     {
         private static readonly int _maxPacketSize = 64 * 1024;
-        private static readonly byte[] _emptyPacketPayload = new byte[4];
-
-        /// <summary>
-        /// Serializes a Packet and prepends the length (int32, big-endian).
-        /// </summary>
-        public static byte[] SerializePacket(Packet packet)
+        private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
+        private static readonly Packet _heartbeatPacket = new()
         {
-            if (packet == null)
-                return _emptyPacketPayload;
+            Identifier = new(PacketType.Heartbeat),
+            Payload = []
+        };
 
-            var payload = JsonSerializer.SerializeToUtf8Bytes(packet);
-            if (payload.Length > _maxPacketSize) throw new InvalidOperationException($"Packet too large: {payload.Length} bytes");
-
-            var buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
-
-            // Length prefix
-            BinaryPrimitives.WriteInt32BigEndian(buffer.AsSpan(0, 4), payload.Length);
-            payload.CopyTo(buffer.AsSpan(4, payload.Length));
-
-            // Return a trimmed copy for sending
-            var result = new byte[4 + payload.Length];
-            Buffer.BlockCopy(buffer, 0, result, 0, result.Length);
-            ArrayPool<byte>.Shared.Return(buffer);
-            return result;
-        }
+        private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
+            .WithSecurity(MessagePackSecurity.UntrustedData);
 
         /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
         public static async Task SendPacketAsync(NetworkStream stream, Packet packet)
         {
-            var data = SerializePacket(packet);
-            await stream.WriteAsync(data);
-            await stream.FlushAsync();
+            if (packet == null)
+            {
+                await stream.WriteAsync(_emptyPacketPayload);
+                return;
+            }
+
+            byte[] payload = MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
+
+            if (payload.Length > _maxPacketSize)
+                throw new InvalidOperationException($"Packet too large: {payload.Length}");
+
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
+
+            try
+            {
+                var span = buffer.AsSpan();
+
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(0, 4), payload.Length);
+                payload.CopyTo(span.Slice(4));
+
+                await stream.WriteAsync(buffer.AsMemory(0, 4 + payload.Length));
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
         /// <summary>
@@ -60,7 +67,7 @@ namespace Portly.Core.PacketHandling
                 int bytesRead = 0;
                 while (bytesRead < 4)
                 {
-                    int read = await stream.ReadAsync(lengthBuffer.AsMemory(bytesRead, 4 - bytesRead));
+                    int read = await stream.ReadAsync(lengthBuffer.AsMemory(bytesRead, 4 - bytesRead), token);
                     if (read == 0) throw new IOException("Connection closed");
                     bytesRead += read;
                 }
@@ -71,15 +78,11 @@ namespace Portly.Core.PacketHandling
                 if (packetLength < 0) throw new IOException("Invalid packet length");
                 if (packetLength > _maxPacketSize) throw new IOException($"Packet too large: {packetLength} bytes");
 
-                Packet? packet = null;
+                Packet packet;
                 if (packetLength == 0)
                 {
                     // Zero-length packet - heartbeat packet
-                    packet = new Packet
-                    {
-                        Type = PacketType.Heartbeat,
-                        Payload = []
-                    };
+                    packet = _heartbeatPacket;
                 }
                 else
                 {
@@ -92,14 +95,21 @@ namespace Portly.Core.PacketHandling
                         int offset = 0;
                         while (offset < packetLength)
                         {
-                            int read = await stream.ReadAsync(dataBuffer.AsMemory(offset, packetLength - offset));
+                            int read = await stream.ReadAsync(dataBuffer.AsMemory(offset, packetLength - offset), token);
                             if (read == 0) throw new IOException("Connection closed");
                             offset += read;
                         }
 
-                        // Deserialize immediately
-                        packet = JsonSerializer.Deserialize<Packet>(dataBuffer.AsSpan(0, packetLength));
-                        if (packet != null && packet.Type == PacketType.Handshake)
+                        try
+                        {
+                            packet = MessagePackSerializer.Deserialize<Packet>(dataBuffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new IOException("Failed to deserialize packet: " + ex.Message);
+                        }
+
+                        if (packet.Identifier.Id == (int)PacketType.Handshake || packet.Encrypted)
                             clearDataBufferAfterUse = true;
                     }
                     finally
@@ -108,55 +118,58 @@ namespace Portly.Core.PacketHandling
                     }
                 }
 
-                // Now process packet asynchronously without holding the buffer
-                if (packet != null)
-                {
-                    await onPacket(packet);
-                }
+                await onPacket(packet);
             }
         }
 
-        public static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream)
+        public static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken token = default)
         {
             byte[] lengthBuffer = new byte[4];
 
             int read = 0;
             while (read < 4)
             {
-                int r = await stream.ReadAsync(lengthBuffer.AsMemory(read, 4 - read));
+                int r = await stream.ReadAsync(lengthBuffer.AsMemory(read, 4 - read), token);
                 if (r == 0) throw new IOException("Connection closed");
                 read += r;
             }
 
-            int packetLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
+            int packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
             if (packetLength < 0) throw new IOException("Invalid packet length");
 
             if (packetLength == 0)
             {
-                return new Packet
-                {
-                    Type = PacketType.Heartbeat,
-                    Payload = []
-                };
+                return _heartbeatPacket;
             }
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(packetLength);
+            bool clearDataBufferAfterUse = false;
+
             try
             {
                 int offset = 0;
                 while (offset < packetLength)
                 {
-                    int r = await stream.ReadAsync(buffer.AsMemory(offset, packetLength - offset));
+                    int r = await stream.ReadAsync(buffer.AsMemory(offset, packetLength - offset), token);
                     if (r == 0) throw new IOException("Connection closed");
                     offset += r;
                 }
 
-                var packet = System.Text.Json.JsonSerializer.Deserialize<Packet>(buffer.AsSpan(0, packetLength));
-                return packet == null ? throw new IOException("Failed to deserialize packet") : packet;
+                try
+                {
+                    var packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
+                    if (packet.Identifier.Id == (int)PacketType.Handshake || packet.Encrypted)
+                        clearDataBufferAfterUse = true;
+                    return packet;
+                }
+                catch (Exception ex)
+                {
+                    throw new IOException("Failed to deserialize packet: " + ex.Message);
+                }
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+                ArrayPool<byte>.Shared.Return(buffer, clearDataBufferAfterUse);
             }
         }
     }

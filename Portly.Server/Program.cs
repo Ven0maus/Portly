@@ -9,7 +9,7 @@ namespace Portly.Server
             var server = new PortlyServer(25565);
 
             // run the server in background so the main thread continues
-            _ = Task.Run(() => server.StartAsync());
+            await server.StartAsync();
 
             Console.WriteLine("Write shutdown to stop the server.");
             var input = Console.ReadLine();

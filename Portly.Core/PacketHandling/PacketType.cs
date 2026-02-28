@@ -1,9 +1,9 @@
 ﻿namespace Portly.Core.PacketHandling
 {
-    public enum PacketType
+    internal enum PacketType
     {
-        Handshake,
         Heartbeat,
+        Handshake,
         Disconnect
     }
 }

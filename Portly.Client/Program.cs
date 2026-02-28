@@ -25,7 +25,7 @@ namespace Portly.Client
 
         private static Task OnReceivePacket(Packet packet)
         {
-            Console.WriteLine("Received task: " + (packet?.Type.ToString() ?? "invalid"));
+            Console.WriteLine("Received task: " + (packet?.Identifier.ToString() ?? "invalid"));
             return Task.CompletedTask;
         }
     }
