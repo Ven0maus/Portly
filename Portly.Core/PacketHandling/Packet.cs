@@ -42,13 +42,25 @@ namespace Portly.Core.PacketHandling
         private T? _payloadObj;
         public T PayloadObj => _payloadObj ??= MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-        public static Packet<T> FromPayload(T payload)
+        internal Packet() { }
+
+        /// <summary>
+        /// Creates a new generic typed packet.
+        /// </summary>
+        /// <param name="identifier"></param>
+        /// <param name="payload"></param>
+        /// <param name="encrypted"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public static Packet<T> Create(PacketIdentifier identifier, T payload, bool encrypted)
         {
             try
             {
                 return new Packet<T>
                 {
                     _payloadObj = payload,
+                    Identifier = identifier,
+                    Encrypted = encrypted,
                     Payload = MessagePackSerializer.Serialize(payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData))
                 };
             }
