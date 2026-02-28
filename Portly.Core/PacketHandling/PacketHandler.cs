@@ -10,7 +10,7 @@ namespace Portly.Core.PacketHandling
     /// </summary>
     public static class PacketHandler
     {
-        private static readonly int _maxPacketSize = 64 * 1024;
+        private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
         private static readonly Packet _heartbeatPacket = new()
         {
@@ -20,6 +20,15 @@ namespace Portly.Core.PacketHandling
 
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
+
+        /// <summary>
+        /// Allows overriding the max packet size. <br>Default: 64 KB</br>
+        /// </summary>
+        /// <param name="maxPacketSize"></param>
+        public static void SetMaxPacketSize(int maxPacketSize = 64 * 1024)
+        {
+            _maxPacketSize = maxPacketSize;
+        }
 
         /// <summary>
         /// Sends a packet over a NetworkStream.

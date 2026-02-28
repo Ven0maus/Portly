@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace Portly.Core.Server
 {
-    internal class ClientConnection(TcpClient client)
+    internal class ClientConnection(TcpClient client) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
@@ -11,6 +11,8 @@ namespace Portly.Core.Server
 
         public DateTime LastReceived { get; set; } = DateTime.UtcNow;
         public DateTime LastSent { get; set; } = DateTime.UtcNow;
+
+        public Guid Id { get; } = Guid.NewGuid();
 
         private int _disconnected = 0;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
