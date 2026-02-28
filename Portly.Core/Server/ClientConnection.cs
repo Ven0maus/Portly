@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace Portly.Core.Server
 {
-    internal class ClientConnection(TcpClient client) : IServerClient
+    internal class ClientConnection(TcpClient client, EventHandler<Guid>? onDisconnect) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
@@ -16,6 +16,8 @@ namespace Portly.Core.Server
 
         private int _disconnected = 0;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
+
+        private readonly EventHandler<Guid>? _onDisconnect = onDisconnect;
 
         public async Task SendPacketAsync(Packet packet)
         {
@@ -42,6 +44,8 @@ namespace Portly.Core.Server
             try { Cancellation.Cancel(); } catch { }
             try { Stream.Close(); } catch { }
             try { Client.Close(); } catch { }
+
+            _onDisconnect?.Invoke(this, Id);
         }
     }
 }

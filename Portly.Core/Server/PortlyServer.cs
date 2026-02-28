@@ -36,6 +36,8 @@ namespace Portly.Core.Server
         public IReadOnlyCollection<IServerClient> ConnectedClients =>
             _clients.Values.Cast<IServerClient>().ToList().AsReadOnly();
 
+        public event EventHandler<Guid>? OnClientConnected, OnClientDisconnected;
+
         public PortlyServer(int port)
         {
             _port = port;
@@ -124,7 +126,7 @@ namespace Portly.Core.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ClientConnection(client);
+            var connection = new ClientConnection(client, OnClientDisconnected);
             _clients[connection.Id] = connection;
 
             var remoteEndpoint = client.Client.RemoteEndPoint;
@@ -176,6 +178,8 @@ namespace Portly.Core.Server
                 }, CancellationToken.None);
 
                 _clientTasks[connection.Id] = clientTask;
+
+                OnClientConnected?.Invoke(this, connection.Id);
             }
             catch (Exception ex)
             {
