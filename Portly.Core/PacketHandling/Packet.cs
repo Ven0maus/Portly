@@ -20,17 +20,27 @@ namespace Portly.Core.PacketHandling
         [IgnoreMember]
         internal byte[]? SerializedPacket { get; set; }
 
-        public T FromPayload<T>()
+        /// <summary>
+        /// Convert to a generic typed packet.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public Packet<T> As<T>()
         {
-            return MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
+            return new Packet<T>
+            {
+                Identifier = Identifier,
+                Encrypted = Encrypted,
+                Payload = Payload,
+                SerializedPacket = SerializedPacket
+            };
         }
     }
 
     public class Packet<T> : Packet
     {
         private T? _payloadObj;
-
-        public T PayloadObj => _payloadObj ??= FromPayload<T>();
+        public T PayloadObj => _payloadObj ??= MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
         public static Packet<T> FromPayload(T payload)
         {
