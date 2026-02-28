@@ -41,7 +41,7 @@ namespace Portly.Core.PacketHandling
                 return;
             }
 
-            byte[] payload = MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
+            byte[] payload = packet.SerializedPacket ??= MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
 
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");

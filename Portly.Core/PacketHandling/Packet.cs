@@ -6,13 +6,19 @@ namespace Portly.Core.PacketHandling
     public class Packet
     {
         [Key(0)]
-        public PacketIdentifier Identifier { get; set; }
+        public PacketIdentifier Identifier { get; init; }
 
         [Key(1)]
-        public bool Encrypted { get; set; }
+        public bool Encrypted { get; init; }
 
         [Key(2)]
-        public required byte[] Payload { get; set; } = [];
+        public required byte[] Payload { get; init; } = [];
+
+        /// <summary>
+        /// Stores the serialized byte array from the entire packet, for caching purposes when sending to multiple clients.
+        /// </summary>
+        [IgnoreMember]
+        internal byte[]? SerializedPacket { get; set; }
 
         public T FromPayload<T>()
         {
