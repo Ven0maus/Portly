@@ -131,7 +131,7 @@ namespace Portly.Core.PacketHandling
             }
         }
 
-        public static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken token = default)
+        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken token = default)
         {
             byte[] lengthBuffer = new byte[4];
 

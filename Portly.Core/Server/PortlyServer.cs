@@ -27,6 +27,7 @@ namespace Portly.Core.Server
         private readonly CancellationTokenSource _cts;
         private readonly int _port;
 
+        private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ClientConnection> _clients = new();
         private readonly ConcurrentDictionary<Guid, Task> _clientTasks = new();
 
@@ -116,12 +117,70 @@ namespace Portly.Core.Server
             Console.WriteLine(graceful ? "Server stopped gracefully." : "Server stopped.");
         }
 
+        /// <summary>
+        /// Sends a packet to all connected clients.
+        /// </summary>
+        /// <param name="packet"></param>
+        /// <returns></returns>
+        public async Task SendToClientsAsync(Packet packet)
+        {
+            var tasks = ConnectedClients
+                .Select(async client =>
+            {
+                await _broadcastSemaphore.WaitAsync();
+                try
+                {
+                    await client.SendPacketAsync(packet);
+                }
+                catch (Exception)
+                {
+                    try { client.Disconnect(); } catch { }
+                }
+                finally
+                {
+                    _broadcastSemaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+        }
+
+        /// <summary>
+        /// Sends a packet with a generic payload object to all connected clients.
+        /// </summary>
+        /// <param name="packet"></param>
+        /// <returns></returns>
+        public async Task SendToClientsAsync<T>(Packet<T> packet)
+        {
+            await SendToClientsAsync(packet);
+        }
+
+        /// <summary>
+        /// Sends a packet to the specified client.
+        /// </summary>
+        /// <param name="clientId"></param>
+        /// <param name="packet"></param>
+        /// <returns></returns>
+        /// <exception cref="KeyNotFoundException"></exception>
         public async Task SendToClientAsync(Guid clientId, Packet packet)
         {
             if (_clients.TryGetValue(clientId, out var client))
                 await client.SendPacketAsync(packet);
             else
                 throw new KeyNotFoundException($"Client {clientId} not connected.");
+        }
+
+        /// <summary>
+        /// Sends a packet with a generic payload object to the specified client.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="clientId"></param>
+        /// <param name="packet"></param>
+        /// <returns></returns>
+        /// <exception cref="KeyNotFoundException"></exception>
+        public async Task SendToClientAsync<T>(Guid clientId, Packet<T> packet)
+        {
+            await SendToClientAsync(clientId, packet);
         }
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
