@@ -1,4 +1,5 @@
 ﻿using Portly.Authentication.Handshake;
+using Portly.Interfaces;
 using Portly.PacketHandling;
 
 namespace Portly
@@ -26,13 +27,13 @@ namespace Portly
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
         }
 
-        private async Task HandleDisconnectPacket(PortlyClientBase client, Packet packet)
+        private async Task HandleDisconnectPacket(IClient client, Packet packet)
         {
             string reason = string.Empty;
             if (packet.Payload.Length != 0)
                 reason = packet.As<string>().Payload;
 
-            await client.DisconnectInternalAsync(false, reason);
+            await ((PortlyClient)client).DisconnectInternalAsync(false, reason);
         }
     }
 }

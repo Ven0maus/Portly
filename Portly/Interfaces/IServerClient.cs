@@ -3,7 +3,7 @@
 namespace Portly.Server
 {
     /// <summary>
-    /// Represents the connected client's data object for a server.
+    /// Represents the server-side client data object.
     /// </summary>
     public interface IServerClient
     {

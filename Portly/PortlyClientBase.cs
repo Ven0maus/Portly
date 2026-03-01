@@ -23,7 +23,7 @@ namespace Portly
     /// This implementation does not include encryption but ensures server identity
     /// verification as a foundation for secure communication.
     /// </summary>
-    public abstract class PortlyClientBase
+    public abstract class PortlyClientBase : IClient
     {
         private readonly TrustClient _trustClient = new();
         private TcpClient? _client;
@@ -32,7 +32,7 @@ namespace Portly
         private CancellationTokenSource? _cts;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private IPacketCrypto? _crypto;
-        private readonly PacketRouter<PortlyClientBase> _packetRouter = new();
+        private readonly PacketRouter<IClient> _packetRouter = new();
 
         private readonly KeepAliveManager<PortlyClientBase> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
             async (client) => await client.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
@@ -41,7 +41,7 @@ namespace Portly
         /// <summary>
         /// A router that helps with registering packet handlers to handle packets easily based on their identifiers.
         /// </summary>
-        public PacketRouter<PortlyClientBase> Router => _packetRouter;
+        public PacketRouter<IClient> Router => _packetRouter;
 
         /// <summary>
         /// Raised when a packet is received.
@@ -61,13 +61,7 @@ namespace Portly
         /// </summary>
         internal PortlyClientBase() { }
 
-        /// <summary>
-        /// Connects asynchronously to a server.
-        /// </summary>
-        /// <param name="host"></param>
-        /// <param name="port"></param>
-        /// <returns></returns>
-        /// <exception cref="InvalidOperationException"></exception>
+        /// <inheritdoc/>
         public async Task ConnectAsync(string host, int port)
         {
             if (Interlocked.CompareExchange(ref _connected, 1, 0) != 0)
@@ -131,20 +125,13 @@ namespace Portly
             }
         }
 
-        /// <summary>
-        /// Sends a packet asynchronously to the connected server.
-        /// </summary>
-        /// <param name="packet"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public async Task SendPacketAsync(Packet packet)
         {
             await SendPacketInternalAsync(_stream, packet);
         }
 
-        /// <summary>
-        /// Disconnects asynchronously from the connected server.
-        /// </summary>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public async Task DisconnectAsync()
         {
             await DisconnectInternalAsync(true);
