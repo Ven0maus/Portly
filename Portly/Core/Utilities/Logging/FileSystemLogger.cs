@@ -233,14 +233,6 @@ namespace Portly.Core.Utilities.Logging
             public int BatchSize { get; set; } = 1;
 
             /// <summary>
-            /// Gets or sets the maximum number of log entries that can be queued before new entries are dropped.
-            /// When the capacity is reached, additional log messages may be discarded to avoid blocking the application.
-            /// Higher values allow for larger bursts of logging at the cost of increased memory usage.
-            /// Defaults to <c>10000</c>.
-            /// </summary>
-            public int ChannelCapacity { get; set; } = 10_000;
-
-            /// <summary>
             /// Gets or sets the number of days to retain log files before they are automatically deleted.
             /// A value of <c>0</c> or less disables log cleanup.
             /// Defaults to <c>7</c>.
