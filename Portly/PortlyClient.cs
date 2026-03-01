@@ -1,11 +1,13 @@
-﻿using Portly.Core.Authentication.Encryption;
-using Portly.Core.Authentication.Handshake;
-using Portly.Core.Extensions;
-using Portly.Core.PacketHandling;
+﻿using Portly.Authentication.Encryption;
+using Portly.Authentication.Handshake;
+using Portly.Extensions;
+using Portly.Interfaces;
+using Portly.Managers;
+using Portly.PacketHandling;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 
-namespace Portly.Core.Client
+namespace Portly
 {
     /// <summary>
     /// Represents a TCP-based client responsible for connecting to a server,
@@ -28,10 +30,12 @@ namespace Portly.Core.Client
         private NetworkStream? _stream;
         private int _connected = 0;
         private CancellationTokenSource? _cts;
-        private DateTime _lastReceived;
-        private DateTime _lastSent;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private IPacketCrypto? _crypto;
+
+        private readonly KeepAliveManager<PortlyClient> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
+            async (client) => await client.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
+            async (client) => await client.DisconnectAsync());
 
         /// <summary>
         /// Raised when the client is connected with the server after a succesful handshake.
@@ -73,14 +77,10 @@ namespace Portly.Core.Client
                 _stream = stream;
                 _cts = cts;
 
-                _lastReceived = DateTime.UtcNow;
-                _lastSent = DateTime.UtcNow;
-
                 var token = cts.Token;
-
                 var receiveTask = PacketHandler.ReadPacketsAsync(stream, async packet =>
                 {
-                    _lastReceived = DateTime.UtcNow;
+                    _keepAliveManager.UpdateLastReceived(this);
 
                     if (packet.Identifier.Id == (int)PacketType.KeepAlive)
                         return;
@@ -93,7 +93,10 @@ namespace Portly.Core.Client
                     await onPacket(packet);
                 }, _crypto, cts.Token);
 
-                var KeepAliveTask = KeepAliveLoop(token);
+                // Update initial state
+                _keepAliveManager.Register(this);
+
+                var KeepAliveTask = _keepAliveManager.StartAsync(cts.Token);
 
                 _ = Task.Run(async () =>
                 {
@@ -151,7 +154,7 @@ namespace Portly.Core.Client
             try
             {
                 await PacketHandler.SendPacketAsync(stream, packet, _crypto);
-                _lastSent = DateTime.UtcNow;
+                _keepAliveManager.UpdateLastSent(this);
             }
             finally
             {
@@ -195,7 +198,7 @@ namespace Portly.Core.Client
             {
                 _stream = null;
                 _client = null;
-
+                _keepAliveManager.Unregister(this);
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -252,41 +255,6 @@ namespace Portly.Core.Client
 
             // 6. Derive session key
             _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
-        }
-
-        private async Task KeepAliveLoop(CancellationToken token)
-        {
-            var interval = TimeSpan.FromSeconds(5);
-            var timeout = TimeSpan.FromSeconds(15);
-
-            try
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    await Task.Delay(interval, token);
-
-                    if (_stream == null)
-                        break;
-
-                    if (DateTime.UtcNow - _lastSent > interval)
-                    {
-                        await SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false));
-
-                        _lastSent = DateTime.UtcNow;
-                    }
-
-                    if (DateTime.UtcNow - _lastReceived > timeout)
-                    {
-                        await DisconnectAsync();
-                        break;
-                    }
-                }
-            }
-            catch (OperationCanceledException) { }
-            catch
-            {
-                await DisconnectAsync();
-            }
         }
     }
 }

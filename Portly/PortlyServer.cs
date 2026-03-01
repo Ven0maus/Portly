@@ -1,12 +1,15 @@
-﻿using Portly.Core.Authentication.Encryption;
-using Portly.Core.Authentication.Handshake;
-using Portly.Core.Extensions;
-using Portly.Core.PacketHandling;
+﻿using Portly.Authentication.Encryption;
+using Portly.Authentication.Handshake;
+using Portly.Extensions;
+using Portly.Managers;
+using Portly.Models;
+using Portly.PacketHandling;
+using Portly.Server;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Portly.Core.Server
+namespace Portly
 {
     /// <summary>
     /// Represents a TCP-based server responsible for accepting client connections,
@@ -32,6 +35,10 @@ namespace Portly.Core.Server
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
         private readonly ConcurrentDictionary<Guid, Task> _clientTasks = new();
+
+        private readonly KeepAliveManager<ServerClient> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
+            async (serverClient) => await serverClient.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
+            async (serverClient) => await serverClient.DisconnectInternalAsync());
 
         /// <summary>
         /// All connected clients.
@@ -73,6 +80,7 @@ namespace Portly.Core.Server
             {
                 try
                 {
+                    _ = _keepAliveManager.StartAsync(_cts.Token);
                     while (!_cts.Token.IsCancellationRequested)
                     {
                         var client = await _listener.AcceptTcpClientAsync(_cts.Token);
@@ -118,7 +126,7 @@ namespace Portly.Core.Server
                     try
                     {
                         Console.WriteLine($"Forcibly disconnecting [{(remaining.Client?.Client?.RemoteEndPoint?.ToString() ?? "Unknown")}]");
-                        remaining.Disconnect();
+                        await remaining.DisconnectInternalAsync();
                     }
                     catch (Exception ex)
                     {
@@ -141,7 +149,7 @@ namespace Portly.Core.Server
         /// <returns></returns>
         public async Task SendToClientsAsync(Packet packet)
         {
-            var tasks = ConnectedClients
+            var tasks = _clients.Values.ToArray()
                 .Select(async client =>
             {
                 await _broadcastSemaphore.WaitAsync();
@@ -151,7 +159,7 @@ namespace Portly.Core.Server
                 }
                 catch (Exception)
                 {
-                    try { client.Disconnect(); } catch { }
+                    try { await client.DisconnectInternalAsync(); } catch { }
                 }
                 finally
                 {
@@ -202,7 +210,7 @@ namespace Portly.Core.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(client, OnClientDisconnected);
+            var connection = new ServerClient(client, _keepAliveManager, OnClientDisconnected);
             _clients[connection.Id] = connection;
 
             var remoteEndpoint = client.Client.RemoteEndPoint;
@@ -210,12 +218,19 @@ namespace Portly.Core.Server
 
             try
             {
-                // Handshake
-                bool trusted = await PerformHandshakeAsync(connection);
-                if (!trusted)
+                try
                 {
-                    Console.WriteLine($"[{remoteEndpoint}]: Handshake failed");
-                    connection.Disconnect();
+                    if (!await PerformHandshakeAsync(connection))
+                    {
+                        Console.WriteLine($"[{remoteEndpoint}]: Disconnected (handshake rejected).");
+                        await connection.DisconnectInternalAsync();
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[{remoteEndpoint}]: Disconnected (handshake error: {ex.Message})");
+                    await connection.DisconnectInternalAsync();
                     return;
                 }
 
@@ -229,14 +244,16 @@ namespace Portly.Core.Server
                     var remoteEndpoint = connection.Client.Client.RemoteEndPoint;
                     try
                     {
+                        // Register connection
+                        _keepAliveManager.Register(connection);
+
                         await Task.WhenAny(
                             PacketHandler.ReadPacketsAsync(connection.Stream, async packet =>
                             {
-                                connection.LastReceived = DateTime.UtcNow;
+                                _keepAliveManager.UpdateLastReceived(connection);
                                 if (packet.Identifier.Id != (int)PacketType.KeepAlive)
                                     await HandlePacketAsync(connection, packet);
-                            }, connection.Crypto, linkedCts.Token),
-                            KeepAliveLoop(connection, linkedCts.Token)
+                            }, connection.Crypto, linkedCts.Token)
                         );
                     }
                     catch (OperationCanceledException) { }
@@ -246,7 +263,7 @@ namespace Portly.Core.Server
                     }
                     finally
                     {
-                        connection.Disconnect();
+                        await connection.DisconnectInternalAsync();
                         _clients.TryRemove(connection.Id, out _);
                         _clientTasks.TryRemove(connection.Id, out _);
                         Console.WriteLine($"[{remoteEndpoint}]: Disconnected.");
@@ -268,7 +285,7 @@ namespace Portly.Core.Server
                         PrintException(e.InnerException, level + 1);
                 }
 
-                Console.WriteLine($"[{remoteEndpoint}] Exception caught:");
+                Console.WriteLine($"[{remoteEndpoint}] Exception:");
                 PrintException(ex);
             }
         }
@@ -322,46 +339,13 @@ namespace Portly.Core.Server
             return true;
         }
 
-        private static async Task KeepAliveLoop(ServerClient connection, CancellationToken token)
-        {
-            var interval = TimeSpan.FromSeconds(5);
-            var timeout = TimeSpan.FromSeconds(15);
-
-            try
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    await Task.Delay(interval, token);
-
-                    if (DateTime.UtcNow - connection.LastSent > interval)
-                    {
-                        await connection.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false));
-
-                        connection.LastSent = DateTime.UtcNow;
-                    }
-
-                    if (DateTime.UtcNow - connection.LastReceived > timeout)
-                    {
-                        Console.WriteLine($"[{(connection.Client?.Client?.RemoteEndPoint?.ToString() ?? "Unknown")}]: Timed out");
-                        connection.Disconnect();
-                        break;
-                    }
-                }
-            }
-            catch (OperationCanceledException) { }
-            catch
-            {
-                connection.Disconnect();
-            }
-        }
-
         private static async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
             // Handle system packets
             switch (packet.Identifier.Id)
             {
                 case (int)PacketType.Disconnect:
-                    connection.Disconnect();
+                    await connection.DisconnectInternalAsync();
                     break;
             }
 

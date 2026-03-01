@@ -1,6 +1,6 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.PacketHandling;
 
-namespace Portly.Core.Authentication.Encryption
+namespace Portly.Interfaces
 {
     internal interface IPacketCrypto
     {

@@ -1,4 +1,4 @@
-﻿namespace Portly.Core.PacketHandling
+﻿namespace Portly.PacketHandling
 {
     internal enum PacketType
     {

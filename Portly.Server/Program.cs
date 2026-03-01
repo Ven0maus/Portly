@@ -1,5 +1,4 @@
-﻿using Portly.Core.PacketHandling;
-using Portly.Core.Server;
+﻿using Portly.PacketHandling;
 
 namespace Portly.Server
 {

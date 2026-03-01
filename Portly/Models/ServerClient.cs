@@ -1,27 +1,28 @@
-﻿using Portly.Core.Authentication.Encryption;
-using Portly.Core.PacketHandling;
+﻿using Portly.Interfaces;
+using Portly.Managers;
+using Portly.PacketHandling;
+using Portly.Server;
 using System.Net.Sockets;
 
-namespace Portly.Core.Server
+namespace Portly.Models
 {
     /// <summary>
     /// Represent a data container for a client that is connected to a server.
     /// </summary>
     /// <param name="client"></param>
+    /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
-    internal class ServerClient(TcpClient client, EventHandler<Guid>? onDisconnect) : IServerClient
+    internal class ServerClient(TcpClient client, KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
         public CancellationTokenSource Cancellation { get; } = new();
 
-        public DateTime LastReceived { get; set; } = DateTime.UtcNow;
-        public DateTime LastSent { get; set; } = DateTime.UtcNow;
-
         public Guid Id { get; } = Guid.NewGuid();
         internal IPacketCrypto? Crypto { get; set; }
 
         private int _disconnected = 0;
+        private readonly KeepAliveManager<ServerClient> _keepAliveManager = keepAliveManager;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
 
         private readonly EventHandler<Guid>? _onDisconnect = onDisconnect;
@@ -35,7 +36,7 @@ namespace Portly.Core.Server
             try
             {
                 await PacketHandler.SendPacketAsync(Stream, packet, Crypto);
-                LastSent = DateTime.UtcNow;
+                _keepAliveManager.UpdateLastSent(this);
             }
             finally
             {
@@ -43,7 +44,22 @@ namespace Portly.Core.Server
             }
         }
 
-        public void Disconnect()
+        public async Task DisconnectAsync()
+        {
+            if (Interlocked.Exchange(ref _disconnected, 1) == 1)
+                return;
+
+            // Send disconnection packet before cancel
+            await SendPacketAsync(Packet.Create(PacketType.Disconnect, Array.Empty<byte>(), false));
+            await DisconnectInternalAsync();
+        }
+
+        /// <summary>
+        /// Disconnects the client without sending a disconnect packet.
+        /// <br>Usually called when we are aware the client is already no longer receiving any packets.</br>
+        /// </summary>
+        /// <returns></returns>
+        internal async Task DisconnectInternalAsync()
         {
             if (Interlocked.Exchange(ref _disconnected, 1) == 1)
                 return;
@@ -52,6 +68,7 @@ namespace Portly.Core.Server
             try { Stream.Close(); } catch { }
             try { Client.Close(); } catch { }
 
+            _keepAliveManager.Unregister(this);
             _onDisconnect?.Invoke(this, Id);
         }
     }

@@ -1,6 +1,6 @@
 ﻿using MessagePack;
 
-namespace Portly.Core.PacketHandling
+namespace Portly.PacketHandling
 {
     /// <summary>
     /// Base packet implementation

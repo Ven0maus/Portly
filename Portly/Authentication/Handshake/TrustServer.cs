@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace Portly.Core.Authentication.Handshake
+namespace Portly.Authentication.Handshake
 {
     /// <summary>
     /// Manages the server’s cryptographic identity and proves it to clients during connection handshakes.

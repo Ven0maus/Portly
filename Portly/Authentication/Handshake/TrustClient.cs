@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace Portly.Core.Authentication.Handshake
+namespace Portly.Authentication.Handshake
 {
     /// <summary>
     /// Manages Trust-On-First-Use (TOFU) for servers from the client perspective. Its responsibility is to establish and maintain trust in a server’s identity across connections.

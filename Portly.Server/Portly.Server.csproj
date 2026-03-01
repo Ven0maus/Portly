@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Portly.Core\Portly.Core.csproj" />
+    <ProjectReference Include="..\Portly\Portly.csproj" />
   </ItemGroup>
 
 </Project>

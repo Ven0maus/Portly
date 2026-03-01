@@ -1,6 +1,6 @@
 ﻿using MessagePack;
 
-namespace Portly.Core.PacketHandling
+namespace Portly.PacketHandling
 {
     /// <summary>
     /// Identifier to identify the packet by Id. (Range 0-100 is reserved)

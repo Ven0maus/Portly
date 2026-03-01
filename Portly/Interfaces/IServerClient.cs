@@ -1,6 +1,6 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.PacketHandling;
 
-namespace Portly.Core.Server
+namespace Portly.Server
 {
     /// <summary>
     /// Represents the connected client's data object for a server.
@@ -13,16 +13,6 @@ namespace Portly.Core.Server
         Guid Id { get; }
 
         /// <summary>
-        /// Datetime when last a packet was received.
-        /// </summary>
-        DateTime LastReceived { get; }
-
-        /// <summary>
-        /// Datetime when last a packet was send.
-        /// </summary>
-        DateTime LastSent { get; }
-
-        /// <summary>
         /// Sends a packet asynchronously to the client.
         /// </summary>
         /// <param name="packet"></param>
@@ -30,8 +20,8 @@ namespace Portly.Core.Server
         Task SendPacketAsync(Packet packet);
 
         /// <summary>
-        /// Disconnects the client from the server.
+        /// Disconnects the client from the server, and informing them with a disconnect packet.
         /// </summary>
-        void Disconnect();
+        Task DisconnectAsync();
     }
 }

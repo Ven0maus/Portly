@@ -1,10 +1,10 @@
 ﻿using MessagePack;
-using Portly.Core.Authentication.Encryption;
+using Portly.Interfaces;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Net.Sockets;
 
-namespace Portly.Core.PacketHandling
+namespace Portly.PacketHandling
 {
     /// <summary>
     /// Utility class that manages serialization, sending, and receiving of length-prefixed packets over TCP, with memory-efficient handling.

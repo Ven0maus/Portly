@@ -1,7 +1,8 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.Interfaces;
+using Portly.PacketHandling;
 using System.Security.Cryptography;
 
-namespace Portly.Core.Authentication.Encryption
+namespace Portly.Authentication.Encryption
 {
     internal sealed class AesPacketCrypto(byte[] key) : IPacketCrypto
     {

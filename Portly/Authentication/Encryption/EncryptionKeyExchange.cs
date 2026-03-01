@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 
-namespace Portly.Core.Authentication.Encryption
+namespace Portly.Authentication.Encryption
 {
     /// <summary>
     /// Standard EC Diffie hellman key exchange for encryption using AES
