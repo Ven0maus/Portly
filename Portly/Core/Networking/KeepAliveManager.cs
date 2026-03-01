@@ -1,4 +1,4 @@
-﻿namespace Portly.Managers
+﻿namespace Portly.Core.Networking
 {
     internal class KeepAliveManager<TClient> where TClient : class
     {

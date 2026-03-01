@@ -1,4 +1,4 @@
-﻿using Portly.PacketHandling;
+﻿using Portly.Core.PacketHandling;
 
 namespace Portly.Client
 {
@@ -9,9 +9,9 @@ namespace Portly.Client
         private static async Task Main()
         {
             PacketProtocol.SetDebugMode(true);
+            _client.OnConnected += OnConnected;
             await _client.ConnectAsync("localhost", 25565);
 
-            Console.WriteLine("Write shutdown to stop the client.");
             var input = Console.ReadLine();
             while (string.IsNullOrWhiteSpace(input) || !input.Equals("shutdown", StringComparison.OrdinalIgnoreCase))
             {
@@ -24,11 +24,9 @@ namespace Portly.Client
             Console.ReadKey();
         }
 
-        private static Task OnReceivePacket(Packet packet)
+        private static void OnConnected(object? sender, EventArgs e)
         {
-            var identifier = packet?.Identifier.ToString() ?? "invalid";
-            Console.WriteLine($"Packet({identifier}): {packet?.As<string>().Payload}");
-            return Task.CompletedTask;
+            Console.WriteLine("Write shutdown to stop the client.");
         }
     }
 }

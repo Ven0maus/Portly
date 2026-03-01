@@ -1,4 +1,4 @@
-﻿namespace Portly.Models
+﻿namespace Portly.Core.Configuration
 {
     internal class ServerSettings
     {

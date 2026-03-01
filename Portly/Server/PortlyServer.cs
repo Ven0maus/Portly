@@ -1,10 +1,9 @@
-﻿using Portly.Authentication.Handshake;
-using Portly.Models;
-using Portly.PacketHandling;
-using Portly.Server;
+﻿using Portly.Core.Authentication.Handshake;
+using Portly.Core.Interfaces;
+using Portly.Core.PacketHandling;
 using System.Net.Sockets;
 
-namespace Portly
+namespace Portly.Server
 {
     /// <summary>
     /// Represents a TCP-based server responsible for accepting client connections,

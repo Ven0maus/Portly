@@ -1,6 +1,6 @@
-﻿using Portly.PacketHandling;
+﻿using Portly.Core.PacketHandling;
 
-namespace Portly.Interfaces
+namespace Portly.Core.Interfaces
 {
     /// <summary>
     /// Represents the client-side data object

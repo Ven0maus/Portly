@@ -1,13 +1,13 @@
-﻿using Portly.Authentication.Encryption;
-using Portly.Authentication.Handshake;
+﻿using Portly.Core.Authentication.Encryption;
+using Portly.Core.Authentication.Handshake;
+using Portly.Core.Interfaces;
+using Portly.Core.Networking;
+using Portly.Core.PacketHandling;
 using Portly.Extensions;
-using Portly.Interfaces;
-using Portly.Managers;
-using Portly.PacketHandling;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 
-namespace Portly
+namespace Portly.Client
 {
     /// <summary>
     /// Represents a TCP-based client responsible for connecting to a server,

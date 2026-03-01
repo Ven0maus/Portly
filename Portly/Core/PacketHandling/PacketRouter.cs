@@ -1,6 +1,7 @@
-﻿using System.Collections.Concurrent;
+﻿using Portly.PacketHandling;
+using System.Collections.Concurrent;
 
-namespace Portly.PacketHandling
+namespace Portly.Core.PacketHandling
 {
     /// <summary>
     /// A router to route packets based on their identifier to their correct packet handlers.

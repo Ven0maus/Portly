@@ -1,10 +1,10 @@
-﻿using Portly.Interfaces;
-using Portly.Managers;
-using Portly.PacketHandling;
-using Portly.Server;
+﻿using Portly.Core.Configuration;
+using Portly.Core.Interfaces;
+using Portly.Core.Networking;
+using Portly.Core.PacketHandling;
 using System.Net.Sockets;
 
-namespace Portly.Models
+namespace Portly.Server
 {
     /// <summary>
     /// Represent a data container for a client that is connected to a server.

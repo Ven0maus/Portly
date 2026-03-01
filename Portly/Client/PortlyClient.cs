@@ -1,8 +1,8 @@
-﻿using Portly.Authentication.Handshake;
-using Portly.Interfaces;
-using Portly.PacketHandling;
+﻿using Portly.Core.Authentication.Handshake;
+using Portly.Core.Interfaces;
+using Portly.Core.PacketHandling;
 
-namespace Portly
+namespace Portly.Client
 {
     /// <summary>
     /// Represents a TCP-based client responsible for connecting to a server,

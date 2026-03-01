@@ -1,4 +1,4 @@
-﻿using Portly.PacketHandling;
+﻿using Portly.Core.PacketHandling;
 
 namespace Portly.Server
 {
@@ -9,7 +9,6 @@ namespace Portly.Server
         private static async Task Main()
         {
             PacketProtocol.SetDebugMode(true);
-            _server.OnClientConnected += Server_OnClientConnected;
 
             // run the server in background so the main thread continues
             await _server.StartAsync();
@@ -25,11 +24,6 @@ namespace Portly.Server
 
             Console.WriteLine("Press any key to exit.");
             Console.ReadKey();
-        }
-
-        private static async void Server_OnClientConnected(object? sender, Guid e)
-        {
-            await _server.SendToClientAsync(e, Packet.Create(PacketTypes.HelloWorld, "Hello World", true));
         }
 
         public enum PacketTypes

@@ -1,15 +1,15 @@
-﻿using Portly.Authentication.Encryption;
-using Portly.Authentication.Handshake;
+﻿using Portly.Core.Authentication.Encryption;
+using Portly.Core.Authentication.Handshake;
+using Portly.Core.Configuration;
+using Portly.Core.Interfaces;
+using Portly.Core.Networking;
+using Portly.Core.PacketHandling;
 using Portly.Extensions;
-using Portly.Managers;
-using Portly.Models;
-using Portly.PacketHandling;
-using Portly.Server;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Portly
+namespace Portly.Server
 {
     /// <summary>
     /// Use <see cref="PortlyServer"/> implementation instead.

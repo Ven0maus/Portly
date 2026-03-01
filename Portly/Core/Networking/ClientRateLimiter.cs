@@ -1,4 +1,6 @@
-﻿namespace Portly.Models
+﻿using Portly.Core.Configuration;
+
+namespace Portly.Core.Networking
 {
     /// <summary>
     /// A rate limiting implementation that handles both packet and bandwith limiting.

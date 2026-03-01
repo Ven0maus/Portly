@@ -1,6 +1,6 @@
 ﻿using MessagePack;
 
-namespace Portly.Authentication.Handshake
+namespace Portly.Core.Authentication.Handshake
 {
     [MessagePackObject(AllowPrivate = true)]
     internal sealed class ClientHandshake
