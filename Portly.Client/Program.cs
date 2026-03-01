@@ -8,8 +8,8 @@ namespace Portly.Client
 
         private static async Task Main()
         {
-            PacketHandler.SetDebugMode(true);
-            await _client.ConnectAsync("localhost", 25565, OnReceivePacket);
+            PacketProtocol.SetDebugMode(true);
+            await _client.ConnectAsync("localhost", 25565);
 
             Console.WriteLine("Write shutdown to stop the client.");
             var input = Console.ReadLine();

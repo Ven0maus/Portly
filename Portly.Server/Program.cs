@@ -8,7 +8,7 @@ namespace Portly.Server
 
         private static async Task Main()
         {
-            PacketHandler.SetDebugMode(true);
+            PacketProtocol.SetDebugMode(true);
             _server.OnClientConnected += Server_OnClientConnected;
 
             // run the server in background so the main thread continues

@@ -9,7 +9,7 @@ namespace Portly.PacketHandling
     /// <summary>
     /// Utility class that manages serialization, sending, and receiving of length-prefixed packets over TCP, with memory-efficient handling.
     /// </summary>
-    public static class PacketHandler
+    public static class PacketProtocol
     {
         private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
@@ -81,7 +81,7 @@ namespace Portly.PacketHandling
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer);
+                ArrayPool<byte>.Shared.Return(buffer, packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake);
             }
         }
 
@@ -140,7 +140,7 @@ namespace Portly.PacketHandling
                             throw new IOException("Failed to deserialize packet: " + ex.Message);
                         }
 
-                        if (packet.Identifier.Id == (int)PacketType.Handshake || packet.Encrypted)
+                        if (packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake)
                             clearDataBufferAfterUse = true;
                     }
                     finally
@@ -203,8 +203,7 @@ namespace Portly.PacketHandling
                 try
                 {
                     packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
-                    if (packet.Identifier.Id == (int)PacketType.Handshake || packet.Encrypted)
-                        clearDataBufferAfterUse = true;
+                    clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake;
                 }
                 catch (Exception ex)
                 {

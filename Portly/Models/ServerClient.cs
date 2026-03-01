@@ -19,6 +19,7 @@ namespace Portly.Models
         public NetworkStream Stream { get; } = client.GetStream();
         public CancellationTokenSource Cancellation { get; } = new();
         public ClientRateLimiter ClientRateLimiter { get; } = new(settings.RateLimits);
+        public Task? ClientTask { get; set; }
 
         public Guid Id { get; } = Guid.NewGuid();
         internal IPacketCrypto? Crypto { get; set; }
@@ -37,7 +38,7 @@ namespace Portly.Models
             await _sendLock.WaitAsync();
             try
             {
-                await PacketHandler.SendPacketAsync(Stream, packet, Crypto);
+                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
