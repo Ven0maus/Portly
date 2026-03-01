@@ -30,7 +30,7 @@ namespace Portly.Core.Server
         private readonly int _port;
 
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
-        private readonly ConcurrentDictionary<Guid, ClientConnection> _clients = new();
+        private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
         private readonly ConcurrentDictionary<Guid, Task> _clientTasks = new();
 
         /// <summary>
@@ -183,7 +183,7 @@ namespace Portly.Core.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ClientConnection(client, OnClientDisconnected);
+            var connection = new ServerClient(client, OnClientDisconnected);
             _clients[connection.Id] = connection;
 
             var remoteEndpoint = client.Client.RemoteEndPoint;
@@ -254,7 +254,7 @@ namespace Portly.Core.Server
             }
         }
 
-        private async Task<bool> PerformHandshakeAsync(ClientConnection connection)
+        private async Task<bool> PerformHandshakeAsync(ServerClient connection)
         {
             // 1. Send server identity public key (unchanged)
             byte[] publicKey = _trustServer.GetPublicKey();
@@ -303,7 +303,7 @@ namespace Portly.Core.Server
             return true;
         }
 
-        private static async Task HeartbeatLoop(ClientConnection connection, CancellationToken token)
+        private static async Task HeartbeatLoop(ServerClient connection, CancellationToken token)
         {
             var interval = TimeSpan.FromSeconds(5);
             var timeout = TimeSpan.FromSeconds(15);
@@ -336,7 +336,7 @@ namespace Portly.Core.Server
             }
         }
 
-        private static async Task HandlePacketAsync(ClientConnection connection, Packet packet)
+        private static async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
             // Handle system packets
             switch (packet.Identifier.Id)

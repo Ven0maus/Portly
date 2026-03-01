@@ -4,7 +4,12 @@ using System.Net.Sockets;
 
 namespace Portly.Core.Server
 {
-    internal class ClientConnection(TcpClient client, EventHandler<Guid>? onDisconnect) : IServerClient
+    /// <summary>
+    /// Represent a data container for a client that is connected to a server.
+    /// </summary>
+    /// <param name="client"></param>
+    /// <param name="onDisconnect"></param>
+    internal class ServerClient(TcpClient client, EventHandler<Guid>? onDisconnect) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
