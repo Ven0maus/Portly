@@ -27,6 +27,9 @@ namespace Portly.Core.Utilities.Logging
             _settings = settings ?? new Settings();
             Directory.CreateDirectory(_settings.FolderPath);
 
+            if (_settings.DeleteAllLogsOnStartup)
+                CleanupOldFiles(string.Empty, true);
+
             _processingTask = Task.Run(ProcessQueueAsync);
         }
 
@@ -133,13 +136,28 @@ namespace Portly.Core.Utilities.Logging
             catch { }
         }
 
-        private void CleanupOldFiles(string levelName)
+        private void CleanupOldFiles(string levelName, bool deleteAll = false)
         {
+            string[]? files;
+            if (deleteAll)
+            {
+                files = Directory.GetFiles(_settings.FolderPath);
+
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch { /* ignore errors */ }
+                }
+                return;
+            }
+
             if (_settings.RetentionDays <= 0) return;
 
             var cutoff = DateTime.UtcNow.AddDays(-_settings.RetentionDays);
-            string pattern = GetFilePattern(levelName);
-            var files = Directory.GetFiles(_settings.FolderPath, pattern);
+            files = Directory.GetFiles(_settings.FolderPath);
 
             foreach (var file in files)
             {
@@ -155,13 +173,6 @@ namespace Portly.Core.Utilities.Logging
         private static string FormatMessage(LogEntry entry)
         {
             return $"<msg datetime=\"{entry.Timestamp:HH:mm:ss.fff}\" level=\"{entry.Level}\">{System.Security.SecurityElement.Escape(entry.Message)}</msg>";
-        }
-
-        private string GetFilePattern(string? levelName = null)
-        {
-            return _settings.SplitPerLogLevel && !string.IsNullOrWhiteSpace(levelName)
-                ? $"{levelName}_log_*.xml"
-                : "log_*.xml";
         }
 
         /// <inheritdoc/>
@@ -238,6 +249,11 @@ namespace Portly.Core.Utilities.Logging
             /// Defaults to <c>7</c>.
             /// </summary>
             public int RetentionDays { get; set; } = 7;
+
+            /// <summary>
+            /// Removes all logfiles on startup, if true <see cref="RetentionDays"/> becomes obsolete.
+            /// </summary>
+            public bool DeleteAllLogsOnStartup { get; set; } = false;
         }
     }
 }
