@@ -30,7 +30,12 @@ namespace Portly.Server
 
         private static async void Server_OnClientConnected(object? sender, Guid e)
         {
-            await _server.SendToClientAsync(e, Packet.Create(PacketIdentifier.Create(101), "Hello World", true));
+            await _server.SendToClientAsync(e, Packet.Create(PacketTypes.HelloWorld, "Hello World", true));
+        }
+
+        public enum PacketTypes
+        {
+            HelloWorld = 101
         }
     }
 }

@@ -78,7 +78,7 @@ namespace Portly.Core.Server
             foreach (var connection in _clients.Values.ToArray())
             {
                 // Send disconnection packet before cancel
-                await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Disconnect), [], false));
+                await connection.SendPacketAsync(Packet.Create(PacketType.Disconnect, Array.Empty<byte>(), false));
                 connection.Cancellation.Cancel();
             }
 
@@ -214,7 +214,7 @@ namespace Portly.Core.Server
                             PacketHandler.ReadPacketsAsync(connection.Stream, async packet =>
                             {
                                 connection.LastReceived = DateTime.UtcNow;
-                                if (packet.Identifier.Id != (int)PacketType.Heartbeat)
+                                if (packet.Identifier.Id != (int)PacketType.KeepAlive)
                                     await HandlePacketAsync(connection, packet);
                             }, connection.Crypto, linkedCts.Token),
                             HeartbeatLoop(connection, linkedCts.Token)
@@ -259,7 +259,7 @@ namespace Portly.Core.Server
             // 1. Send server identity public key (unchanged)
             byte[] publicKey = _trustServer.GetPublicKey();
 
-            await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Handshake), publicKey, false));
+            await connection.SendPacketAsync(Packet.Create(PacketType.Handshake, publicKey, false));
 
             // 2. Receive client handshake (UPDATED)
             var requestPacket = await PacketHandler.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto);
@@ -292,7 +292,7 @@ namespace Portly.Core.Server
             };
 
             await connection.SendPacketAsync(Packet<ServerHandshake>.Create(
-                new(PacketType.Handshake),
+                PacketType.Handshake,
                 response,
                 false
             ));
@@ -316,7 +316,7 @@ namespace Portly.Core.Server
 
                     if (DateTime.UtcNow - connection.LastSent > interval)
                     {
-                        await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false));
+                        await connection.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false));
 
                         connection.LastSent = DateTime.UtcNow;
                     }

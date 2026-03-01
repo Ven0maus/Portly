@@ -13,7 +13,7 @@ namespace Portly.Core.PacketHandling
     {
         private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
-        private static readonly Packet _heartbeatPacket = Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false);
+        private static readonly Packet _heartbeatPacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false);
 
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
@@ -43,7 +43,7 @@ namespace Portly.Core.PacketHandling
         /// </summary>
         internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null)
         {
-            if (packet == null || packet.Identifier.Id == (int)PacketType.Heartbeat)
+            if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
                 if (_debugModeEnabled) Console.WriteLine("Send heartbeat packet.");
                 await stream.WriteAsync(_emptyPacketPayload);

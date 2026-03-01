@@ -2,7 +2,7 @@
 {
     internal enum PacketType
     {
-        Heartbeat,
+        KeepAlive,
         Handshake,
         Disconnect
     }

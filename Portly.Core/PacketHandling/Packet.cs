@@ -64,6 +64,18 @@ namespace Portly.Core.PacketHandling
         {
             return Packet<T>.Create(identifier, payload, encrypted);
         }
+
+        /// <summary>
+        /// Creates a packet of the specified type, any MessagePack supported object can be used.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <typeparam name="TEnum"></typeparam>
+        /// <param name="identifier"></param>
+        /// <param name="payload"></param>
+        /// <param name="encrypted"></param>
+        /// <returns></returns>
+        public static Packet<T> Create<T, TEnum>(TEnum identifier, T payload, bool encrypted) where TEnum : Enum
+            => Create((PacketIdentifier)identifier, payload, encrypted);
     }
 
     /// <summary>
@@ -105,5 +117,16 @@ namespace Portly.Core.PacketHandling
                 throw new InvalidOperationException($"Type '{typeof(T)}' is not MessagePack-serializable", ex);
             }
         }
+
+        /// <summary>
+        /// Creates a new generic typed packet.
+        /// </summary>
+        /// <typeparam name="TEnum"></typeparam>
+        /// <param name="identifier"></param>
+        /// <param name="payload"></param>
+        /// <param name="encrypted"></param>
+        /// <returns></returns>
+        public static Packet<T> Create<TEnum>(TEnum identifier, T payload, bool encrypted) where TEnum : Enum
+            => Create((PacketIdentifier)identifier, payload, encrypted);
     }
 }

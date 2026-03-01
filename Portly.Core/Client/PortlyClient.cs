@@ -67,7 +67,7 @@ namespace Portly.Core.Client
                 {
                     _lastReceived = DateTime.UtcNow;
 
-                    if (packet.Identifier.Id == (int)PacketType.Heartbeat)
+                    if (packet.Identifier.Id == (int)PacketType.KeepAlive)
                         return;
                     if (packet.Identifier.Id == (int)PacketType.Disconnect)
                     {
@@ -140,7 +140,7 @@ namespace Portly.Core.Client
                 // Try to send a "disconnect" packet first
                 if (sendMessageToServer && _stream != null)
                 {
-                    var disconnectPacket = Packet.Create<byte[]>(new(PacketType.Disconnect), [], false);
+                    var disconnectPacket = Packet.Create(PacketType.Disconnect, Array.Empty<byte>(), false);
 
                     try
                     {
@@ -200,7 +200,7 @@ namespace Portly.Core.Client
             };
 
             await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
-                new(PacketType.Handshake),
+                PacketType.Handshake,
                 clientHandshake,
                 false
             ));
@@ -246,7 +246,7 @@ namespace Portly.Core.Client
 
                     if (DateTime.UtcNow - _lastSent > interval)
                     {
-                        await SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false));
+                        await SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false));
 
                         _lastSent = DateTime.UtcNow;
                     }
