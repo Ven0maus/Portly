@@ -5,11 +5,12 @@ namespace Portly.Client
 {
     internal class Program
     {
+        private static readonly PortlyClient _client = new();
+
         private static async Task Main()
         {
             PacketHandler.SetDebugMode(true);
-            var client = new PortlyClient();
-            await client.ConnectAsync("localhost", 25565, OnReceivePacket);
+            await _client.ConnectAsync("localhost", 25565, OnReceivePacket);
 
             Console.WriteLine("Write shutdown to stop the client.");
             var input = Console.ReadLine();
@@ -18,7 +19,7 @@ namespace Portly.Client
                 input = Console.ReadLine();
             }
 
-            await client.DisconnectAsync();
+            await _client.DisconnectAsync();
 
             Console.WriteLine("Client disconnected, press any key to exit.");
             Console.ReadKey();

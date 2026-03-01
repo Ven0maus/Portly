@@ -5,7 +5,7 @@ namespace Portly.Server
 {
     internal class Program
     {
-        private static readonly PortlyServer _server = new PortlyServer(25565);
+        private static readonly PortlyServer _server = new(25565);
 
         private static async Task Main()
         {
