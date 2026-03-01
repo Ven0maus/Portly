@@ -13,13 +13,17 @@ namespace Portly.Server
     /// <param name="client"></param>
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
-    internal class ServerClient(ServerSettings settings, TcpClient client, KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect) : IServerClient
+    /// <param name="logProvider"></param>
+    internal class ServerClient(ServerSettings settings, TcpClient client,
+        KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect,
+        ILogProvider? logProvider) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
         public CancellationTokenSource Cancellation { get; } = new();
         public ClientRateLimiter ClientRateLimiter { get; } = new(settings.RateLimits);
         public Task? ClientTask { get; set; }
+        public ILogProvider? LogProvider { get; } = logProvider;
 
         public Guid Id { get; } = Guid.NewGuid();
         internal IPacketCrypto? Crypto { get; set; }
@@ -38,7 +42,7 @@ namespace Portly.Server
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto);
+                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto, LogProvider);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally

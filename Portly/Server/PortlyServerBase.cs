@@ -4,6 +4,7 @@ using Portly.Core.Configuration;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
+using Portly.Core.Utilities.Logging;
 using Portly.Extensions;
 using System.Collections.Concurrent;
 using System.Net;
@@ -33,6 +34,11 @@ namespace Portly.Server
         private readonly int _port;
 
         /// <summary>
+        /// The log provider that is used.
+        /// </summary>
+        public readonly ILogProvider? LogProvider;
+
+        /// <summary>
         /// A router that helps with registering packet handlers to handle packets easily based on their identifiers.
         /// </summary>
         public PacketRouter<IServerClient> Router => _packetRouter;
@@ -60,9 +66,11 @@ namespace Portly.Server
         /// Constructor
         /// </summary>
         /// <param name="port"></param>
-        internal PortlyServerBase(int port)
+        /// <param name="logProvider"></param>
+        internal PortlyServerBase(int port, ILogProvider? logProvider = null)
         {
             _port = port;
+            LogProvider = logProvider;
             _listener = new TcpListener(IPAddress.Any, _port);
             _trustServer = new TrustServer();
             _cts = new();
@@ -76,7 +84,7 @@ namespace Portly.Server
         public async Task StartAsync()
         {
             _listener.Start();
-            Console.WriteLine($"Server started on port \'{_port}\'.");
+            LogProvider?.Log($"Server started on port \'{_port}\'.");
 
             _ = Task.Run(async () =>
             {
@@ -99,7 +107,7 @@ namespace Portly.Server
         /// <returns></returns>
         public async Task StopAsync()
         {
-            Console.WriteLine("Stopping server..");
+            LogProvider?.Log("Stopping server..");
             _cts.Cancel();  // stop accepting new clients
             _listener.Stop();
 
@@ -126,27 +134,27 @@ namespace Portly.Server
             }
             catch (TimeoutException)
             {
-                Console.WriteLine("Warning: Not all client tasks finished in time, forcing shutdown.");
+                LogProvider?.Log("Warning: Not all client tasks finished in time, forcing shutdown.", LogLevel.Warning);
 
                 // Forcefully disconnect remaining connections
                 foreach (var remaining in _clients.Values.ToArray())
                 {
                     try
                     {
-                        Console.WriteLine($"Forcibly disconnecting [{(remaining.Client?.Client?.RemoteEndPoint?.ToString() ?? "Unknown")}]");
+                        LogProvider?.Log($"[{remaining.Id}]: Forcibly disconnecting.", LogLevel.Warning);
                         await remaining.DisconnectInternalAsync();
                     }
                     catch (Exception ex)
                     {
                         // ignore exceptions during forced shutdown
-                        Console.WriteLine($"Error forcibly disconnecting [{(remaining.Client?.Client?.RemoteEndPoint?.ToString() ?? "Unknown")}]: {ex.Message}");
+                        LogProvider?.Log($"[{remaining.Id}]: Error forcibly disconnecting: {ex.Message}", LogLevel.Error);
                     }
                 }
             }
 
             _clients.Clear();
 
-            Console.WriteLine(graceful ? "Server stopped gracefully." : "Server stopped.");
+            LogProvider?.Log(graceful ? "Server stopped gracefully." : "Server stopped.");
         }
 
         /// <summary>
@@ -199,7 +207,7 @@ namespace Portly.Server
             if (_clients.TryGetValue(clientId, out var client))
                 await client.SendPacketAsync(packet);
             else
-                throw new KeyNotFoundException($"Client {clientId} not connected.");
+                LogProvider?.Log($"[{clientId}]: Failed to send packet, not connected.", LogLevel.Warning);
         }
 
         /// <summary>
@@ -217,11 +225,10 @@ namespace Portly.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(_serverSettings, client, _keepAliveManager, OnClientDisconnected);
+            var connection = new ServerClient(_serverSettings, client, _keepAliveManager, OnClientDisconnected, LogProvider);
             _clients[connection.Id] = connection;
 
-            var remoteEndpoint = client.Client.RemoteEndPoint;
-            Console.WriteLine($"[{remoteEndpoint}]: Client connected.");
+            LogProvider?.Log($"[{connection.Id}]: Connected.");
 
             try
             {
@@ -229,19 +236,19 @@ namespace Portly.Server
                 {
                     if (!await PerformHandshakeAsync(connection))
                     {
-                        Console.WriteLine($"[{remoteEndpoint}]: Disconnected (handshake rejected).");
+                        LogProvider?.Log($"[{connection.Id}]: Disconnected (handshake rejected).", LogLevel.Warning);
                         await connection.DisconnectInternalAsync();
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[{remoteEndpoint}]: Disconnected (handshake error: {ex.Message})");
+                    LogProvider?.Log($"[{connection.Id}]: Disconnected (handshake error: {ex.Message})", LogLevel.Error);
                     await connection.DisconnectInternalAsync();
                     return;
                 }
 
-                Console.WriteLine($"[{remoteEndpoint}]: Handshake successful");
+                LogProvider?.Log($"[{connection.Id}]: Handshake successful");
 
                 // Start loops
                 var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(serverToken, connection.Cancellation.Token);
@@ -258,18 +265,18 @@ namespace Portly.Server
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
                                 await HandlePacketAsync(connection, packet);
-                            }, connection.Crypto, linkedCts.Token);
+                            }, connection.Crypto, LogProvider, linkedCts.Token);
                     }
                     catch (OperationCanceledException) { }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[{remoteEndpoint}]: Error: {ex.Message}");
+                        LogProvider?.Log($"[{connection.Id}]: Error: {ex.Message}", LogLevel.Error);
                     }
                     finally
                     {
                         await connection.DisconnectInternalAsync();
                         _clients.TryRemove(connection.Id, out _);
-                        Console.WriteLine($"[{remoteEndpoint}]: Disconnected.");
+                        LogProvider?.Log($"[{connection.Id}]: Disconnected.", LogLevel.Info);
                     }
                 }, CancellationToken.None);
 
@@ -277,16 +284,16 @@ namespace Portly.Server
             }
             catch (Exception ex)
             {
-                static void PrintException(Exception e, int level = 0)
+                void PrintException(Exception e, int level = 0)
                 {
                     var indent = new string(' ', level * 2);
-                    Console.WriteLine($"{indent}{e.GetType().Name}: {e.Message}");
-                    Console.WriteLine($"{indent}{e.StackTrace}");
+                    LogProvider?.Log($"{indent}{e.GetType().Name}: {e.Message}", LogLevel.Error);
+                    LogProvider?.Log($"{indent}{e.StackTrace}", LogLevel.Error);
                     if (e.InnerException != null)
                         PrintException(e.InnerException, level + 1);
                 }
 
-                Console.WriteLine($"[{remoteEndpoint}] Exception:");
+                LogProvider?.Log($"[{connection.Id}]: Exception:", LogLevel.Error);
                 PrintException(ex);
             }
         }
@@ -299,7 +306,7 @@ namespace Portly.Server
             await connection.SendPacketAsync(Packet.Create(PacketType.Handshake, publicKey, false));
 
             // 2. Receive client handshake (UPDATED)
-            var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto);
+            var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto, connection.LogProvider);
             if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.Handshake || requestPacket.Payload == null)
                 return false;
 
@@ -345,7 +352,7 @@ namespace Portly.Server
             // Rate limit non-system packets
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
             {
-                Console.WriteLine($"[{connection.Client.Client.RemoteEndPoint}]: rate limit exceeded, client was forcibly disconnected.");
+                LogProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
                 await connection.DisconnectAsync("Rate limit exceeded.");
                 return;
             }

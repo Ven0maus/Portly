@@ -34,6 +34,11 @@ namespace Portly.Client
         private IPacketCrypto? _crypto;
         private readonly PacketRouter<IClient> _packetRouter = new();
 
+        /// <summary>
+        /// The log provider that is used.
+        /// </summary>
+        public readonly ILogProvider? LogProvider;
+
         private readonly KeepAliveManager<PortlyClientBase> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
             async (client) => await client.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
             async (client) => await client.DisconnectAsync());
@@ -59,7 +64,11 @@ namespace Portly.Client
         /// <summary>
         /// Constructor
         /// </summary>
-        internal PortlyClientBase() { }
+        /// <param name="logProvider"></param>
+        internal PortlyClientBase(ILogProvider? logProvider)
+        {
+            LogProvider = logProvider;
+        }
 
         /// <inheritdoc/>
         public async Task ConnectAsync(string host, int port)
@@ -93,7 +102,7 @@ namespace Portly.Client
                     if (task != null)
                         await task;
                     OnPacketReceived?.Invoke(this, packet);
-                }, _crypto, cts.Token);
+                }, _crypto, LogProvider, cts.Token);
 
                 // Update initial state
                 _keepAliveManager.Register(this);
@@ -148,7 +157,7 @@ namespace Portly.Client
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(stream, packet, _crypto);
+                await PacketProtocol.SendPacketAsync(stream, packet, _crypto, LogProvider);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
@@ -183,7 +192,7 @@ namespace Portly.Client
 
                 if (!sendMessageToServer)
                 {
-                    Console.WriteLine(string.IsNullOrWhiteSpace(reason) ?
+                    LogProvider?.Log(string.IsNullOrWhiteSpace(reason) ?
                         "You lost connection to the server." : $"You lost connection to the server: {reason}");
                 }
 
@@ -209,7 +218,7 @@ namespace Portly.Client
         private async Task PerformHandshakeAsync(NetworkStream stream, string host, int port)
         {
             // 1. Receive server identity public key
-            var publicKeyPacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto);
+            var publicKeyPacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
             var publicKey = publicKeyPacket.Payload;
 
             if (publicKeyPacket.Identifier.Id != (int)PacketType.Handshake || publicKey == null)
@@ -236,7 +245,7 @@ namespace Portly.Client
             ));
 
             // 4. Receive server response
-            var responsePacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto);
+            var responsePacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
             if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.Handshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 

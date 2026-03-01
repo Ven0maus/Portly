@@ -1,15 +1,13 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.Core.Utilities.Logging;
 
 namespace Portly.Server
 {
     internal class Program
     {
-        private static readonly PortlyServer _server = new(25565);
+        private static readonly PortlyServer _server = new(25565, new ConsoleLogger(true));
 
         private static async Task Main()
         {
-            PacketProtocol.SetDebugMode(true);
-
             // run the server in background so the main thread continues
             await _server.StartAsync();
 

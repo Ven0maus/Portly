@@ -1,5 +1,6 @@
 ﻿using MessagePack;
 using Portly.Core.Interfaces;
+using Portly.Core.Utilities.Logging;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Net.Sockets;
@@ -18,8 +19,6 @@ namespace Portly.Core.PacketHandling
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
-        private static bool _debugModeEnabled = false;
-
         /// <summary>
         /// Allows overriding the max packet size. <br>Default: 64 KB</br>
         /// </summary>
@@ -30,22 +29,13 @@ namespace Portly.Core.PacketHandling
         }
 
         /// <summary>
-        /// Enabling debug mode will log extra information about packets to the console.
-        /// </summary>
-        /// <param name="enabled"></param>
-        public static void SetDebugMode(bool enabled)
-        {
-            _debugModeEnabled = enabled;
-        }
-
-        /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
-        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null)
+        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null, ILogProvider? logProvider = null)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
-                if (_debugModeEnabled) Console.WriteLine("Send KeepAlive packet.");
+                logProvider?.Log("Send KeepAlive packet.", LogLevel.Debug);
                 await stream.WriteAsync(_emptyPacketPayload);
                 return;
             }
@@ -66,7 +56,7 @@ namespace Portly.Core.PacketHandling
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");
 
-            if (_debugModeEnabled) Console.WriteLine($"Sending packet of size {payload.Length}.");
+            logProvider?.Log($"Sending packet of size {payload.Length}.", LogLevel.Debug);
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
 
@@ -88,7 +78,7 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Continuously reads packets from a NetworkStream, using ArrayPool buffers to reduce allocations.
         /// </summary>
-        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, CancellationToken token = default)
+        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, CancellationToken token = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -158,14 +148,13 @@ namespace Portly.Core.PacketHandling
                     throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
-                if (_debugModeEnabled)
-                    Console.WriteLine(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.");
+                logProvider?.Log(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.", LogLevel.Debug);
 
                 await onPacket(packet);
             }
         }
 
-        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, IPacketCrypto? crypto = null, CancellationToken token = default)
+        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, CancellationToken token = default)
         {
             byte[] lengthBuffer = new byte[4];
 
@@ -182,7 +171,7 @@ namespace Portly.Core.PacketHandling
 
             if (packetLength == 0)
             {
-                if (_debugModeEnabled) Console.WriteLine("Received KeepAlive packet.");
+                logProvider?.Log("Received KeepAlive packet.", LogLevel.Debug);
                 return _KeepAlivePacket;
             }
 
@@ -219,7 +208,7 @@ namespace Portly.Core.PacketHandling
                     throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
-                if (_debugModeEnabled) Console.WriteLine($"Received packet of length {packetLength}.");
+                logProvider?.Log($"Received packet of length {packetLength}.", LogLevel.Debug);
 
                 return packet;
             }

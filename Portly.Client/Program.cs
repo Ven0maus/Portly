@@ -1,14 +1,13 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.Core.Utilities.Logging;
 
 namespace Portly.Client
 {
     internal class Program
     {
-        private static readonly PortlyClient _client = new();
+        private static readonly PortlyClient _client = new(new ConsoleLogger(true));
 
         private static async Task Main()
         {
-            PacketProtocol.SetDebugMode(true);
             _client.OnConnected += OnConnected;
             await _client.ConnectAsync("localhost", 25565);
 
