@@ -2,6 +2,9 @@
 
 namespace Portly.Core.PacketHandling
 {
+    /// <summary>
+    /// Base packet implementation
+    /// </summary>
     [MessagePackObject(AllowPrivate = true)]
     public class Packet
     {
@@ -49,13 +52,25 @@ namespace Portly.Core.PacketHandling
             return packet;
         }
 
+        /// <summary>
+        /// Creates a packet of the specified type, any MessagePack supported object can be used.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="identifier"></param>
+        /// <param name="payload"></param>
+        /// <param name="encrypted"></param>
+        /// <returns></returns>
         public static Packet<T> Create<T>(PacketIdentifier identifier, T payload, bool encrypted)
         {
             return Packet<T>.Create(identifier, payload, encrypted);
         }
     }
 
-    public class Packet<T> : Packet
+    /// <summary>
+    /// Generic packet implementation
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    public sealed class Packet<T> : Packet
     {
         private T? _payloadObj;
         public T PayloadObj => _payloadObj ??= MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));

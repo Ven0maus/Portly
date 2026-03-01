@@ -25,7 +25,7 @@ namespace Portly.Core.Authentication.Encryption
             Buffer.BlockCopy(ciphertext, 0, combined, 28, ciphertext.Length);
 
             packet._payloadBackingField = combined;
-            packet.SerializedPacket = null; // IMPORTANT
+            packet.SerializedPacket = null; // in-case we happen to store non encrypted packet already at this point (which should never be the case)
 
             return packet;
         }
