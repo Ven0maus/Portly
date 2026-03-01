@@ -1,15 +1,19 @@
-﻿using Portly.Core.Server;
+﻿using Portly.Core.PacketHandling;
+using Portly.Core.Server;
 
 namespace Portly.Server
 {
     internal class Program
     {
+        private static readonly PortlyServer _server = new PortlyServer(25565);
+
         private static async Task Main()
         {
-            var server = new PortlyServer(25565);
+            PacketHandler.SetDebugMode(true);
+            _server.OnClientConnected += Server_OnClientConnected;
 
             // run the server in background so the main thread continues
-            await server.StartAsync();
+            await _server.StartAsync();
 
             Console.WriteLine("Write shutdown to stop the server.");
             var input = Console.ReadLine();
@@ -18,10 +22,15 @@ namespace Portly.Server
                 input = Console.ReadLine();
             }
 
-            await server.StopAsync();
+            await _server.StopAsync();
 
             Console.WriteLine("Press any key to exit.");
             Console.ReadKey();
+        }
+
+        private static async void Server_OnClientConnected(object? sender, Guid e)
+        {
+            await _server.SendToClientAsync(e, Packet.Create(PacketIdentifier.Create(101), "Hello World", true));
         }
     }
 }

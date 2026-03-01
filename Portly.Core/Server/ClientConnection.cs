@@ -1,4 +1,5 @@
-﻿using Portly.Core.PacketHandling;
+﻿using Portly.Core.Authentication.Encryption;
+using Portly.Core.PacketHandling;
 using System.Net.Sockets;
 
 namespace Portly.Core.Server
@@ -13,6 +14,7 @@ namespace Portly.Core.Server
         public DateTime LastSent { get; set; } = DateTime.UtcNow;
 
         public Guid Id { get; } = Guid.NewGuid();
+        internal IPacketCrypto? Crypto { get; set; }
 
         private int _disconnected = 0;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -27,7 +29,7 @@ namespace Portly.Core.Server
             await _sendLock.WaitAsync();
             try
             {
-                await PacketHandler.SendPacketAsync(Stream, packet);
+                await PacketHandler.SendPacketAsync(Stream, packet, Crypto);
                 LastSent = DateTime.UtcNow;
             }
             finally

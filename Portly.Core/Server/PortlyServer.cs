@@ -1,4 +1,6 @@
-﻿using Portly.Core.Authentication.Handshake;
+﻿using Portly.Core.Authentication.Encryption;
+using Portly.Core.Authentication.Handshake;
+using Portly.Core.Extensions;
 using Portly.Core.PacketHandling;
 using System.Collections.Concurrent;
 using System.Net;
@@ -76,11 +78,7 @@ namespace Portly.Core.Server
             foreach (var connection in _clients.Values.ToArray())
             {
                 // Send disconnection packet before cancel
-                await connection.SendPacketAsync(new Packet
-                {
-                    Identifier = new(PacketType.Disconnect),
-                    Payload = []
-                });
+                await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Disconnect), [], false));
                 connection.Cancellation.Cancel();
             }
 
@@ -152,7 +150,7 @@ namespace Portly.Core.Server
         /// <returns></returns>
         public async Task SendToClientsAsync<T>(Packet<T> packet)
         {
-            await SendToClientsAsync(packet);
+            await SendToClientsAsync((Packet)packet);
         }
 
         /// <summary>
@@ -180,7 +178,7 @@ namespace Portly.Core.Server
         /// <exception cref="KeyNotFoundException"></exception>
         public async Task SendToClientAsync<T>(Guid clientId, Packet<T> packet)
         {
-            await SendToClientAsync(clientId, packet);
+            await SendToClientAsync(clientId, (Packet)packet);
         }
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
@@ -218,7 +216,7 @@ namespace Portly.Core.Server
                                 connection.LastReceived = DateTime.UtcNow;
                                 if (packet.Identifier.Id != (int)PacketType.Heartbeat)
                                     await HandlePacketAsync(connection, packet);
-                            }, linkedCts.Token),
+                            }, connection.Crypto, linkedCts.Token),
                             HeartbeatLoop(connection, linkedCts.Token)
                         );
                     }
@@ -242,31 +240,65 @@ namespace Portly.Core.Server
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{remoteEndpoint}]: Error: {ex.Message}");
+                static void PrintException(Exception e, int level = 0)
+                {
+                    var indent = new string(' ', level * 2);
+                    Console.WriteLine($"{indent}{e.GetType().Name}: {e.Message}");
+                    Console.WriteLine($"{indent}{e.StackTrace}");
+                    if (e.InnerException != null)
+                        PrintException(e.InnerException, level + 1);
+                }
+
+                Console.WriteLine($"[{remoteEndpoint}] Exception caught:");
+                PrintException(ex);
             }
         }
 
         private async Task<bool> PerformHandshakeAsync(ClientConnection connection)
         {
+            // 1. Send server identity public key (unchanged)
             byte[] publicKey = _trustServer.GetPublicKey();
 
-            await connection.SendPacketAsync(new Packet
-            {
-                Identifier = new(PacketType.Handshake),
-                Payload = publicKey
-            });
+            await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Handshake), publicKey, false));
 
-            var challengePacket = await PacketHandler.ReceiveSinglePacketAsync(connection.Stream);
-            if (challengePacket.Identifier.Id != (int)PacketType.Handshake || challengePacket.Payload == null)
+            // 2. Receive client handshake (UPDATED)
+            var requestPacket = await PacketHandler.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto);
+            if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.Handshake || requestPacket.Payload == null)
                 return false;
 
-            var signature = _trustServer.SignChallenge(challengePacket.Payload);
+            var request = requestPacket.As<ClientHandshake>();
 
-            await connection.SendPacketAsync(new Packet
+            if (request.PayloadObj.Challenge == null || request.PayloadObj.Challenge.Length == 0 ||
+                request.PayloadObj.ClientEphemeralKey == null || request.PayloadObj.ClientEphemeralKey.Length == 0)
+                return false;
+
+            // 3. Create ECDH key exchange
+            using var keyExchange = new EncryptionKeyExchange();
+
+            // 4. Build signed data
+            byte[] signedData = request.PayloadObj.Challenge.Combine(
+                request.PayloadObj.ClientEphemeralKey,
+                keyExchange.PublicKey
+            );
+
+            // 5. Sign (binds identity + key exchange)
+            byte[] signature = _trustServer.SignChallenge(signedData);
+
+            // 6. Send response
+            var response = new ServerHandshake
             {
-                Identifier = new(PacketType.Handshake),
-                Payload = signature
-            });
+                ServerEphemeralKey = keyExchange.PublicKey,
+                Signature = signature
+            };
+
+            await connection.SendPacketAsync(Packet<ServerHandshake>.Create(
+                new(PacketType.Handshake),
+                response,
+                false
+            ));
+
+            // 7. Derive session key
+            connection.Crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.PayloadObj.ClientEphemeralKey));
 
             return true;
         }
@@ -284,11 +316,7 @@ namespace Portly.Core.Server
 
                     if (DateTime.UtcNow - connection.LastSent > interval)
                     {
-                        await connection.SendPacketAsync(new Packet
-                        {
-                            Identifier = new(PacketType.Heartbeat),
-                            Payload = []
-                        });
+                        await connection.SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false));
 
                         connection.LastSent = DateTime.UtcNow;
                     }

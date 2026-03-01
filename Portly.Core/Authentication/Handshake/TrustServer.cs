@@ -6,7 +6,7 @@ namespace Portly.Core.Authentication.Handshake
     /// <summary>
     /// Manages the server’s cryptographic identity and proves it to clients during connection handshakes.
     /// </summary>
-    public class TrustServer
+    internal class TrustServer
     {
         private const string KEY_STORAGE_PATH = "server_key.json";
         private readonly ECDsa _keyPair;

@@ -1,4 +1,5 @@
 ﻿using MessagePack;
+using Portly.Core.Authentication.Encryption;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Net.Sockets;
@@ -12,14 +13,12 @@ namespace Portly.Core.PacketHandling
     {
         private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
-        private static readonly Packet _heartbeatPacket = new()
-        {
-            Identifier = new(PacketType.Heartbeat),
-            Payload = []
-        };
+        private static readonly Packet _heartbeatPacket = Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false);
 
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
+
+        private static bool _debugModeEnabled = false;
 
         /// <summary>
         /// Allows overriding the max packet size. <br>Default: 64 KB</br>
@@ -31,20 +30,43 @@ namespace Portly.Core.PacketHandling
         }
 
         /// <summary>
+        /// Enabling debug mode will log extra information about packets to the console.
+        /// </summary>
+        /// <param name="enabled"></param>
+        public static void SetDebugMode(bool enabled)
+        {
+            _debugModeEnabled = enabled;
+        }
+
+        /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
-        public static async Task SendPacketAsync(NetworkStream stream, Packet packet)
+        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null)
         {
-            if (packet == null)
+            if (packet == null || packet.Identifier.Id == (int)PacketType.Heartbeat)
             {
+                if (_debugModeEnabled) Console.WriteLine("Send heartbeat packet.");
                 await stream.WriteAsync(_emptyPacketPayload);
                 return;
+            }
+
+            try
+            {
+                // Only encrypt once
+                if (packet.SerializedPacket == null)
+                    packet = crypto?.Encrypt(packet) ?? packet;
+            }
+            catch (Exception ex)
+            {
+                throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
             }
 
             byte[] payload = packet.SerializedPacket ??= MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
 
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");
+
+            if (_debugModeEnabled) Console.WriteLine($"Sending packet of size {payload.Length}.");
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
 
@@ -66,7 +88,7 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Continuously reads packets from a NetworkStream, using ArrayPool buffers to reduce allocations.
         /// </summary>
-        public static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, CancellationToken token = default)
+        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, CancellationToken token = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -127,11 +149,23 @@ namespace Portly.Core.PacketHandling
                     }
                 }
 
+                try
+                {
+                    packet = crypto?.Decrypt(packet) ?? packet;
+                }
+                catch (Exception ex)
+                {
+                    throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
+                }
+
+                if (_debugModeEnabled)
+                    Console.WriteLine(packetLength == 0 ? "Received heartbeat packet." : $"Received packet of length {packetLength}.");
+
                 await onPacket(packet);
             }
         }
 
-        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken token = default)
+        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, IPacketCrypto? crypto = null, CancellationToken token = default)
         {
             byte[] lengthBuffer = new byte[4];
 
@@ -148,6 +182,7 @@ namespace Portly.Core.PacketHandling
 
             if (packetLength == 0)
             {
+                if (_debugModeEnabled) Console.WriteLine("Received heartbeat packet.");
                 return _heartbeatPacket;
             }
 
@@ -164,17 +199,30 @@ namespace Portly.Core.PacketHandling
                     offset += r;
                 }
 
+                Packet packet;
                 try
                 {
-                    var packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
+                    packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
                     if (packet.Identifier.Id == (int)PacketType.Handshake || packet.Encrypted)
                         clearDataBufferAfterUse = true;
-                    return packet;
                 }
                 catch (Exception ex)
                 {
-                    throw new IOException("Failed to deserialize packet: " + ex.Message);
+                    throw new IOException("Failed to deserialize packet: " + ex.Message, ex);
                 }
+
+                try
+                {
+                    packet = crypto?.Decrypt(packet) ?? packet;
+                }
+                catch (Exception ex)
+                {
+                    throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
+                }
+
+                if (_debugModeEnabled) Console.WriteLine($"Received packet of length {packetLength}.");
+
+                return packet;
             }
             finally
             {

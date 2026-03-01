@@ -2,23 +2,38 @@
 
 namespace Portly.Core.PacketHandling
 {
-    [MessagePackObject(SuppressSourceGeneration = true)]
+    [MessagePackObject(AllowPrivate = true)]
     public class Packet
     {
         [Key(0)]
         public PacketIdentifier Identifier { get; init; }
 
+        [IgnoreMember]
+        internal byte[] _payloadBackingField = [];
+
         [Key(1)]
-        public bool Encrypted { get; init; }
+        public byte[] Payload
+        {
+            get => _payloadBackingField;
+            init => _payloadBackingField = value; // public can only init
+        }
 
         [Key(2)]
-        public required byte[] Payload { get; init; } = [];
+        public bool Encrypted { get; init; }
 
         /// <summary>
         /// Stores the serialized byte array from the entire packet, for caching purposes when sending to multiple clients.
         /// </summary>
         [IgnoreMember]
         internal byte[]? SerializedPacket { get; set; }
+
+        [SerializationConstructor]
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
+        {
+            Identifier = identifier;
+            Payload = payload;
+            Encrypted = encrypted;
+        }
 
         /// <summary>
         /// Convert to a generic typed packet.
@@ -27,13 +42,16 @@ namespace Portly.Core.PacketHandling
         /// <returns></returns>
         public Packet<T> As<T>()
         {
-            return new Packet<T>
+            var packet = new Packet<T>(Identifier, Payload, Encrypted)
             {
-                Identifier = Identifier,
-                Encrypted = Encrypted,
-                Payload = Payload,
                 SerializedPacket = SerializedPacket
             };
+            return packet;
+        }
+
+        public static Packet<T> Create<T>(PacketIdentifier identifier, T payload, bool encrypted)
+        {
+            return Packet<T>.Create(identifier, payload, encrypted);
         }
     }
 
@@ -42,7 +60,9 @@ namespace Portly.Core.PacketHandling
         private T? _payloadObj;
         public T PayloadObj => _payloadObj ??= MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-        internal Packet() { }
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
+            : base(identifier, payload, encrypted)
+        { }
 
         /// <summary>
         /// Creates a new generic typed packet.
@@ -56,12 +76,13 @@ namespace Portly.Core.PacketHandling
         {
             try
             {
-                return new Packet<T>
+                var serializedPayload = payload is byte[] bytePayload ? bytePayload :
+                    MessagePackSerializer.Serialize(payload,
+                        MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
+
+                return new Packet<T>(identifier, serializedPayload, encrypted)
                 {
                     _payloadObj = payload,
-                    Identifier = identifier,
-                    Encrypted = encrypted,
-                    Payload = MessagePackSerializer.Serialize(payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData))
                 };
             }
             catch (Exception ex)

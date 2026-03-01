@@ -1,4 +1,6 @@
-﻿using Portly.Core.Authentication.Handshake;
+﻿using Portly.Core.Authentication.Encryption;
+using Portly.Core.Authentication.Handshake;
+using Portly.Core.Extensions;
 using Portly.Core.PacketHandling;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -29,6 +31,7 @@ namespace Portly.Core.Client
         private DateTime _lastReceived;
         private DateTime _lastSent;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
+        private IPacketCrypto? _crypto;
 
         public event EventHandler? OnConnected, OnDisconnected;
 
@@ -73,7 +76,7 @@ namespace Portly.Core.Client
                     }
 
                     await onPacket(packet);
-                }, cts.Token);
+                }, _crypto, cts.Token);
 
                 var heartbeatTask = HeartbeatLoop(token);
 
@@ -118,7 +121,7 @@ namespace Portly.Core.Client
             await _sendLock.WaitAsync();
             try
             {
-                await PacketHandler.SendPacketAsync(stream, packet);
+                await PacketHandler.SendPacketAsync(stream, packet, _crypto);
                 _lastSent = DateTime.UtcNow;
             }
             finally
@@ -137,11 +140,7 @@ namespace Portly.Core.Client
                 // Try to send a "disconnect" packet first
                 if (sendMessageToServer && _stream != null)
                 {
-                    var disconnectPacket = new Packet
-                    {
-                        Identifier = new(PacketType.Disconnect),
-                        Payload = []
-                    };
+                    var disconnectPacket = Packet.Create<byte[]>(new(PacketType.Disconnect), [], false);
 
                     try
                     {
@@ -179,8 +178,8 @@ namespace Portly.Core.Client
 
         private async Task PerformHandshakeAsync(NetworkStream stream, string host, int port)
         {
-            // 1. Receive server public key
-            var publicKeyPacket = await PacketHandler.ReceiveSinglePacketAsync(stream);
+            // 1. Receive server identity public key
+            var publicKeyPacket = await PacketHandler.ReceiveSinglePacketAsync(stream, _crypto);
             var publicKey = publicKeyPacket.Payload;
 
             if (publicKeyPacket.Identifier.Id != (int)PacketType.Handshake || publicKey == null)
@@ -189,28 +188,46 @@ namespace Portly.Core.Client
             if (!_trustClient.VerifyOrTrustServer(host, port, publicKey))
                 throw new Exception("Server identity verification failed.");
 
-            // 2. Send challenge
+            // 2. Create ECDH + challenge
+            using var keyExchange = new EncryptionKeyExchange();
             byte[] challenge = RandomNumberGenerator.GetBytes(32);
 
-            await SendPacketInternalAsync(stream, new Packet
+            // 3. Send challenge + client ephemeral key
+            var clientHandshake = new ClientHandshake
             {
-                Identifier = new(PacketType.Handshake),
-                Payload = challenge
-            });
+                Challenge = challenge,
+                ClientEphemeralKey = keyExchange.PublicKey
+            };
 
-            // 3. Receive signature
-            var responsePacket = await PacketHandler.ReceiveSinglePacketAsync(stream);
-            var signature = responsePacket.Payload;
+            await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
+                new(PacketType.Handshake),
+                clientHandshake,
+                false
+            ));
 
-            if (responsePacket.Identifier.Id != (int)PacketType.Handshake || signature == null)
+            // 4. Receive server response
+            var responsePacket = await PacketHandler.ReceiveSinglePacketAsync(stream, _crypto);
+            if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.Handshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 
-            // 4. Verify signature
+            var response = responsePacket.As<ServerHandshake>();
+            if (response.PayloadObj.ServerEphemeralKey.Length == 0)
+                throw new Exception("Invalid server key.");
+
+            // 5. Verify signature (binds identity + ECDH)
             using var ecdsa = ECDsa.Create();
             ecdsa.ImportSubjectPublicKeyInfo(publicKey, out _);
 
-            if (!ecdsa.VerifyData(challenge, signature, HashAlgorithmName.SHA256))
+            byte[] signedData = challenge.Combine(
+                keyExchange.PublicKey,
+                response.PayloadObj.ServerEphemeralKey
+            );
+
+            if (!ecdsa.VerifyData(signedData, response.PayloadObj.Signature, HashAlgorithmName.SHA256))
                 throw new Exception("Invalid server signature. Possible MITM attack.");
+
+            // 6. Derive session key
+            _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.PayloadObj.ServerEphemeralKey));
         }
 
         private async Task HeartbeatLoop(CancellationToken token)
@@ -229,11 +246,7 @@ namespace Portly.Core.Client
 
                     if (DateTime.UtcNow - _lastSent > interval)
                     {
-                        await SendPacketAsync(new Packet
-                        {
-                            Identifier = new(PacketType.Heartbeat),
-                            Payload = []
-                        });
+                        await SendPacketAsync(Packet.Create<byte[]>(new(PacketType.Heartbeat), [], false));
 
                         _lastSent = DateTime.UtcNow;
                     }

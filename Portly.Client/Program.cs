@@ -7,6 +7,7 @@ namespace Portly.Client
     {
         private static async Task Main()
         {
+            PacketHandler.SetDebugMode(true);
             var client = new PortlyClient();
             await client.ConnectAsync("localhost", 25565, OnReceivePacket);
 
@@ -25,7 +26,8 @@ namespace Portly.Client
 
         private static Task OnReceivePacket(Packet packet)
         {
-            Console.WriteLine("Received task: " + (packet?.Identifier.ToString() ?? "invalid"));
+            var identifier = packet?.Identifier.ToString() ?? "invalid";
+            Console.WriteLine($"Packet({identifier}): {packet?.As<string>().PayloadObj}");
             return Task.CompletedTask;
         }
     }

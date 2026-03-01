@@ -6,7 +6,7 @@ namespace Portly.Core.Authentication.Handshake
     /// <summary>
     /// Manages Trust-On-First-Use (TOFU) for servers from the client perspective. Its responsibility is to establish and maintain trust in a server’s identity across connections.
     /// </summary>
-    public class TrustClient
+    internal class TrustClient
     {
         private const string SERVER_STORAGE_PATH = "known_servers.json";
         private readonly Dictionary<string, ServerInfo> _knownServers;
