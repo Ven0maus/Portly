@@ -236,7 +236,7 @@ namespace Portly.Core.Server
                                 if (packet.Identifier.Id != (int)PacketType.KeepAlive)
                                     await HandlePacketAsync(connection, packet);
                             }, connection.Crypto, linkedCts.Token),
-                            HeartbeatLoop(connection, linkedCts.Token)
+                            KeepAliveLoop(connection, linkedCts.Token)
                         );
                     }
                     catch (OperationCanceledException) { }
@@ -322,7 +322,7 @@ namespace Portly.Core.Server
             return true;
         }
 
-        private static async Task HeartbeatLoop(ServerClient connection, CancellationToken token)
+        private static async Task KeepAliveLoop(ServerClient connection, CancellationToken token)
         {
             var interval = TimeSpan.FromSeconds(5);
             var timeout = TimeSpan.FromSeconds(15);

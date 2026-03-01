@@ -93,13 +93,13 @@ namespace Portly.Core.Client
                     await onPacket(packet);
                 }, _crypto, cts.Token);
 
-                var heartbeatTask = HeartbeatLoop(token);
+                var KeepAliveTask = KeepAliveLoop(token);
 
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await Task.WhenAny(receiveTask, heartbeatTask);
+                        await Task.WhenAny(receiveTask, KeepAliveTask);
                     }
                     finally
                     {
@@ -184,7 +184,7 @@ namespace Portly.Core.Client
                 if (!sendMessageToServer)
                     Console.WriteLine("You lost connection to the server.");
 
-                // Cancel background tasks (heartbeat, reading)
+                // Cancel background tasks (KeepAlive, reading)
                 _cts?.Cancel();
 
                 // Dispose the stream and client
@@ -254,7 +254,7 @@ namespace Portly.Core.Client
             _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
         }
 
-        private async Task HeartbeatLoop(CancellationToken token)
+        private async Task KeepAliveLoop(CancellationToken token)
         {
             var interval = TimeSpan.FromSeconds(5);
             var timeout = TimeSpan.FromSeconds(15);

@@ -13,7 +13,7 @@ namespace Portly.Core.PacketHandling
     {
         private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
-        private static readonly Packet _heartbeatPacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false);
+        private static readonly Packet _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false);
 
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
@@ -45,7 +45,7 @@ namespace Portly.Core.PacketHandling
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
-                if (_debugModeEnabled) Console.WriteLine("Send heartbeat packet.");
+                if (_debugModeEnabled) Console.WriteLine("Send KeepAlive packet.");
                 await stream.WriteAsync(_emptyPacketPayload);
                 return;
             }
@@ -112,8 +112,8 @@ namespace Portly.Core.PacketHandling
                 Packet packet;
                 if (packetLength == 0)
                 {
-                    // Zero-length packet - heartbeat packet
-                    packet = _heartbeatPacket;
+                    // Zero-length packet - KeepAlive packet
+                    packet = _KeepAlivePacket;
                 }
                 else
                 {
@@ -159,7 +159,7 @@ namespace Portly.Core.PacketHandling
                 }
 
                 if (_debugModeEnabled)
-                    Console.WriteLine(packetLength == 0 ? "Received heartbeat packet." : $"Received packet of length {packetLength}.");
+                    Console.WriteLine(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.");
 
                 await onPacket(packet);
             }
@@ -182,8 +182,8 @@ namespace Portly.Core.PacketHandling
 
             if (packetLength == 0)
             {
-                if (_debugModeEnabled) Console.WriteLine("Received heartbeat packet.");
-                return _heartbeatPacket;
+                if (_debugModeEnabled) Console.WriteLine("Received KeepAlive packet.");
+                return _KeepAlivePacket;
             }
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(packetLength);
