@@ -2,8 +2,8 @@
 
 namespace Portly.Core.Authentication.Handshake
 {
-    [MessagePackObject]
-    public sealed class ServerHandshake
+    [MessagePackObject(AllowPrivate = true)]
+    internal sealed class ServerHandshake
     {
         [Key(0)]
         public byte[] ServerEphemeralKey { get; set; } = [];

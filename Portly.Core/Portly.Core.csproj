@@ -8,7 +8,13 @@
   </PropertyGroup>
 
 	<PropertyGroup>
+		<NoWarn></NoWarn>
+		<WarningsAsErrors>CS1591</WarningsAsErrors>
+	</PropertyGroup>
+
+	<PropertyGroup>
 		<GenerateSerializer>false</GenerateSerializer>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 
   <ItemGroup>

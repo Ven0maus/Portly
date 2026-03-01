@@ -5,25 +5,47 @@ namespace Portly.Core.PacketHandling
     /// <summary>
     /// Identifier to identify the packet by Id. (Range 0-100 is reserved)
     /// </summary>
-    [MessagePackObject]
-    public readonly struct PacketIdentifier
+    [MessagePackObject(AllowPrivate = true)]
+    public readonly partial struct PacketIdentifier
     {
+        /// <summary>
+        /// The packet identifiers unique ID. (Range 0-100 is reserved)
+        /// </summary>
         [Key(0)]
         public int Id { get; }
 
         [SerializationConstructor]
-        public PacketIdentifier(int id)
+        private PacketIdentifier(int id)
         {
-            Id = ValidateId(id);
+            Id = id; // no validation
         }
 
-        public PacketIdentifier(Enum enumValue)
+        /// <summary>
+        /// Creates a new packet identifier from an integer value.
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public static PacketIdentifier Create(int id)
         {
-            Id = enumValue is PacketType pt ? (int)pt : ValidateId(Convert.ToInt32(enumValue));
+            return new PacketIdentifier(ValidateId(id));
         }
 
+        /// <summary>
+        /// Creates a new packet identifier from an enum value.
+        /// </summary>
+        /// <param name="enumValue"></param>
+        /// <returns></returns>
+        public static PacketIdentifier Create(Enum enumValue)
+        {
+            return new PacketIdentifier(enumValue is PacketType pt ? (int)pt : ValidateId(Convert.ToInt32(enumValue)));
+        }
+
+        /// <summary>
+        /// Explicit converter to convert an enum to a <see cref="PacketIdentifier"/>
+        /// </summary>
+        /// <param name="e"></param>
         public static explicit operator PacketIdentifier(Enum e)
-            => new(e);
+            => Create(e);
 
         private static int ValidateId(int id)
         {
@@ -34,12 +56,19 @@ namespace Portly.Core.PacketHandling
             return id;
         }
 
+        /// <inheritdoc/>
         public override string ToString() => $"PacketType({Id})";
 
+        /// <inheritdoc/>
         public override bool Equals(object? obj) => obj is PacketIdentifier other && other.Id == Id;
+
+        /// <inheritdoc/>
         public override int GetHashCode() => Id.GetHashCode();
 
+        /// <inheritdoc/>
         public static bool operator ==(PacketIdentifier a, PacketIdentifier b) => a.Id == b.Id;
+
+        /// <inheritdoc/>
         public static bool operator !=(PacketIdentifier a, PacketIdentifier b) => a.Id != b.Id;
     }
 }

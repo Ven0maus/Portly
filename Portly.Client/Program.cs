@@ -27,7 +27,7 @@ namespace Portly.Client
         private static Task OnReceivePacket(Packet packet)
         {
             var identifier = packet?.Identifier.ToString() ?? "invalid";
-            Console.WriteLine($"Packet({identifier}): {packet?.As<string>().PayloadObj}");
+            Console.WriteLine($"Packet({identifier}): {packet?.As<string>().Payload}");
             return Task.CompletedTask;
         }
     }

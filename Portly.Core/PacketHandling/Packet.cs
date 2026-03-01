@@ -8,12 +8,18 @@ namespace Portly.Core.PacketHandling
     [MessagePackObject(AllowPrivate = true)]
     public class Packet
     {
+        /// <summary>
+        /// The unique identifier for this packet.
+        /// </summary>
         [Key(0)]
         public PacketIdentifier Identifier { get; init; }
 
         [IgnoreMember]
         internal byte[] _payloadBackingField = [];
 
+        /// <summary>
+        /// The payload of this packet in bytes.
+        /// </summary>
         [Key(1)]
         public byte[] Payload
         {
@@ -21,6 +27,9 @@ namespace Portly.Core.PacketHandling
             init => _payloadBackingField = value; // public can only init
         }
 
+        /// <summary>
+        /// Determines if the packet is encrypted or not.
+        /// </summary>
         [Key(2)]
         public bool Encrypted { get; init; }
 
@@ -85,7 +94,10 @@ namespace Portly.Core.PacketHandling
     public sealed class Packet<T> : Packet
     {
         private T? _payloadObj;
-        public T PayloadObj => _payloadObj ??= MessagePackSerializer.Deserialize<T>(Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
+        /// <summary>
+        /// The payload of the packet as a generic typed object.
+        /// </summary>
+        public new T Payload => _payloadObj ??= MessagePackSerializer.Deserialize<T>(base.Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
         internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
             : base(identifier, payload, encrypted)

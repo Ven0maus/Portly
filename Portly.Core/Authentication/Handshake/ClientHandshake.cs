@@ -2,8 +2,8 @@
 
 namespace Portly.Core.Authentication.Handshake
 {
-    [MessagePackObject]
-    public sealed class ClientHandshake
+    [MessagePackObject(AllowPrivate = true)]
+    internal sealed class ClientHandshake
     {
         [Key(0)]
         public byte[] Challenge { get; set; } = [];

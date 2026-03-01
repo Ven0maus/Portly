@@ -39,8 +39,19 @@ namespace Portly.Core.Server
         public IReadOnlyCollection<IServerClient> ConnectedClients =>
             _clients.Values.Cast<IServerClient>().ToList().AsReadOnly();
 
-        public event EventHandler<Guid>? OnClientConnected, OnClientDisconnected;
+        /// <summary>
+        /// Raised when a client is connected to the server after the handshake is succesful.
+        /// </summary>
+        public event EventHandler<Guid>? OnClientConnected;
+        /// <summary>
+        /// Raised when a client is disconnected from the server.
+        /// </summary>
+        public event EventHandler<Guid>? OnClientDisconnected;
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="port"></param>
         public PortlyServer(int port)
         {
             _port = port;
@@ -49,6 +60,10 @@ namespace Portly.Core.Server
             _cts = new();
         }
 
+        /// <summary>
+        /// Starts the server asynchronously.
+        /// </summary>
+        /// <returns></returns>
         public async Task StartAsync()
         {
             _listener.Start();
@@ -68,6 +83,10 @@ namespace Portly.Core.Server
             });
         }
 
+        /// <summary>
+        /// Stops the server asynchronously.
+        /// </summary>
+        /// <returns></returns>
         public async Task StopAsync()
         {
             Console.WriteLine("Stopping server..");
@@ -268,16 +287,16 @@ namespace Portly.Core.Server
 
             var request = requestPacket.As<ClientHandshake>();
 
-            if (request.PayloadObj.Challenge == null || request.PayloadObj.Challenge.Length == 0 ||
-                request.PayloadObj.ClientEphemeralKey == null || request.PayloadObj.ClientEphemeralKey.Length == 0)
+            if (request.Payload.Challenge == null || request.Payload.Challenge.Length == 0 ||
+                request.Payload.ClientEphemeralKey == null || request.Payload.ClientEphemeralKey.Length == 0)
                 return false;
 
             // 3. Create ECDH key exchange
             using var keyExchange = new EncryptionKeyExchange();
 
             // 4. Build signed data
-            byte[] signedData = request.PayloadObj.Challenge.Combine(
-                request.PayloadObj.ClientEphemeralKey,
+            byte[] signedData = request.Payload.Challenge.Combine(
+                request.Payload.ClientEphemeralKey,
                 keyExchange.PublicKey
             );
 
@@ -298,7 +317,7 @@ namespace Portly.Core.Server
             ));
 
             // 7. Derive session key
-            connection.Crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.PayloadObj.ClientEphemeralKey));
+            connection.Crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey));
 
             return true;
         }

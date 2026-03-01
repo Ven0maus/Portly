@@ -33,8 +33,23 @@ namespace Portly.Core.Client
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private IPacketCrypto? _crypto;
 
-        public event EventHandler? OnConnected, OnDisconnected;
+        /// <summary>
+        /// Raised when the client is connected with the server after a succesful handshake.
+        /// </summary>
+        public event EventHandler? OnConnected;
+        /// <summary>
+        /// Raised when the client is disconnected from the server.
+        /// </summary>
+        public event EventHandler? OnDisconnected;
 
+        /// <summary>
+        /// Connects asynchronously to a server.
+        /// </summary>
+        /// <param name="host"></param>
+        /// <param name="port"></param>
+        /// <param name="onPacket"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public async Task ConnectAsync(string host, int port, Func<Packet, Task> onPacket)
         {
             if (Interlocked.CompareExchange(ref _connected, 1, 0) != 0)
@@ -105,9 +120,23 @@ namespace Portly.Core.Client
             }
         }
 
+        /// <summary>
+        /// Sends a packet asynchronously to the connected server.
+        /// </summary>
+        /// <param name="packet"></param>
+        /// <returns></returns>
         public async Task SendPacketAsync(Packet packet)
         {
             await SendPacketInternalAsync(_stream, packet);
+        }
+
+        /// <summary>
+        /// Disconnects asynchronously from the connected server.
+        /// </summary>
+        /// <returns></returns>
+        public async Task DisconnectAsync()
+        {
+            await DisconnectInternalAsync(true);
         }
 
         private async Task SendPacketInternalAsync(NetworkStream? stream, Packet packet)
@@ -171,11 +200,6 @@ namespace Portly.Core.Client
             }
         }
 
-        public async Task DisconnectAsync()
-        {
-            await DisconnectInternalAsync(true);
-        }
-
         private async Task PerformHandshakeAsync(NetworkStream stream, string host, int port)
         {
             // 1. Receive server identity public key
@@ -211,7 +235,7 @@ namespace Portly.Core.Client
                 throw new Exception("Invalid handshake response.");
 
             var response = responsePacket.As<ServerHandshake>();
-            if (response.PayloadObj.ServerEphemeralKey.Length == 0)
+            if (response.Payload.ServerEphemeralKey.Length == 0)
                 throw new Exception("Invalid server key.");
 
             // 5. Verify signature (binds identity + ECDH)
@@ -220,14 +244,14 @@ namespace Portly.Core.Client
 
             byte[] signedData = challenge.Combine(
                 keyExchange.PublicKey,
-                response.PayloadObj.ServerEphemeralKey
+                response.Payload.ServerEphemeralKey
             );
 
-            if (!ecdsa.VerifyData(signedData, response.PayloadObj.Signature, HashAlgorithmName.SHA256))
+            if (!ecdsa.VerifyData(signedData, response.Payload.Signature, HashAlgorithmName.SHA256))
                 throw new Exception("Invalid server signature. Possible MITM attack.");
 
             // 6. Derive session key
-            _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.PayloadObj.ServerEphemeralKey));
+            _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
         }
 
         private async Task HeartbeatLoop(CancellationToken token)
