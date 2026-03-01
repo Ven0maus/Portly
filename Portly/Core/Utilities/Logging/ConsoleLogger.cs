@@ -3,7 +3,7 @@
     /// <summary>
     /// Logs information to the console.
     /// </summary>
-    /// <inheritdoc/>
+    /// <param name="enableDebug">If debug level should be enabled or not.</param>
     public class ConsoleLogger(bool enableDebug = false) : LogProviderBase(enableDebug)
     {
         /// <inheritdoc/>

@@ -4,7 +4,7 @@ namespace Portly.Client
 {
     internal class Program
     {
-        private static readonly PortlyClient _client = new(new ConsoleLogger(true));
+        private static readonly PortlyClient _client = new(new CompositeLogger(new ConsoleLogger(true), new FileSystemLogger(enableDebug: true)));
 
         private static async Task Main()
         {
