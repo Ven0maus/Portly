@@ -84,7 +84,7 @@ namespace Portly.Server
         public async Task StartAsync()
         {
             _listener.Start();
-            LogProvider?.Log($"Server started on port \'{_port}\'.");
+            LogProvider?.Log($"Server started on port {_port}.");
 
             _ = Task.Run(async () =>
             {
@@ -265,7 +265,7 @@ namespace Portly.Server
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
                                 await HandlePacketAsync(connection, packet);
-                            }, connection.Crypto, LogProvider, linkedCts.Token);
+                            }, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
                     }
                     catch (OperationCanceledException) { }
                     catch (Exception ex)
@@ -300,13 +300,13 @@ namespace Portly.Server
 
         private async Task<bool> PerformHandshakeAsync(ServerClient connection)
         {
-            // 1. Send server identity public key (unchanged)
+            // 1. Send server identity public key
             byte[] publicKey = _trustServer.GetPublicKey();
 
             await connection.SendPacketAsync(Packet.Create(PacketType.Handshake, publicKey, false));
 
-            // 2. Receive client handshake (UPDATED)
-            var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto, connection.LogProvider);
+            // 2. Receive client handshake
+            var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto, connection.LogProvider, connection.Id);
             if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.Handshake || requestPacket.Payload == null)
                 return false;
 

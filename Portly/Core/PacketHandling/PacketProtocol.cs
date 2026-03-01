@@ -31,11 +31,11 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
-        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null, ILogProvider? logProvider = null)
+        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
-                logProvider?.Log("Send KeepAlive packet.", LogLevel.Debug);
+                logProvider?.Log(clientId != null ? $"[{clientId}]: KeepAlive check send." : "KeepAlive check send.", LogLevel.Debug);
                 await stream.WriteAsync(_emptyPacketPayload);
                 return;
             }
@@ -56,7 +56,7 @@ namespace Portly.Core.PacketHandling
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");
 
-            logProvider?.Log($"Sending packet of size {payload.Length}.", LogLevel.Debug);
+            logProvider?.Log(clientId != null ? $"[{clientId}]: Sending packet of size {payload.Length}." : $"Sending packet of size {payload.Length}.", LogLevel.Debug);
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
 
@@ -78,7 +78,7 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Continuously reads packets from a NetworkStream, using ArrayPool buffers to reduce allocations.
         /// </summary>
-        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, CancellationToken token = default)
+        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -148,13 +148,14 @@ namespace Portly.Core.PacketHandling
                     throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
-                logProvider?.Log(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.", LogLevel.Debug);
+                var msg = packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.";
+                logProvider?.Log(clientId != null ? $"[{clientId}]: {msg}" : msg, LogLevel.Debug);
 
                 await onPacket(packet);
             }
         }
 
-        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, CancellationToken token = default)
+        internal static async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
         {
             byte[] lengthBuffer = new byte[4];
 
@@ -171,7 +172,7 @@ namespace Portly.Core.PacketHandling
 
             if (packetLength == 0)
             {
-                logProvider?.Log("Received KeepAlive packet.", LogLevel.Debug);
+                logProvider?.Log(clientId != null ? $"[{clientId}]: Received KeepAlive packet." : "Received KeepAlive packet.", LogLevel.Debug);
                 return _KeepAlivePacket;
             }
 
@@ -208,7 +209,7 @@ namespace Portly.Core.PacketHandling
                     throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
-                logProvider?.Log($"Received packet of length {packetLength}.", LogLevel.Debug);
+                logProvider?.Log(clientId != null ? $"[{clientId}]: Received packet of length {packetLength}." : $"Received packet of length {packetLength}.", LogLevel.Debug);
 
                 return packet;
             }

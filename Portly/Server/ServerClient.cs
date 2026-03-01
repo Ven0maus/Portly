@@ -42,7 +42,7 @@ namespace Portly.Server
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto, LogProvider);
+                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto, LogProvider, Id);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally

@@ -102,7 +102,7 @@ namespace Portly.Client
                     if (task != null)
                         await task;
                     OnPacketReceived?.Invoke(this, packet);
-                }, _crypto, LogProvider, cts.Token);
+                }, _crypto, LogProvider, null, cts.Token);
 
                 // Update initial state
                 _keepAliveManager.Register(this);
