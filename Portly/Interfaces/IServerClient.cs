@@ -22,6 +22,6 @@ namespace Portly.Server
         /// <summary>
         /// Disconnects the client from the server, and informing them with a disconnect packet.
         /// </summary>
-        Task DisconnectAsync();
+        Task DisconnectAsync(string reason = "");
     }
 }

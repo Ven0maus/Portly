@@ -82,13 +82,8 @@ namespace Portly
                 {
                     _keepAliveManager.UpdateLastReceived(this);
 
-                    if (packet.Identifier.Id == (int)PacketType.KeepAlive)
-                        return;
-                    if (packet.Identifier.Id == (int)PacketType.Disconnect)
-                    {
-                        await DisconnectInternalAsync(false);
-                        return;
-                    }
+                    bool flowControl = await OnPacketReceived(packet);
+                    if (!flowControl) return;
 
                     await onPacket(packet);
                 }, _crypto, cts.Token);
@@ -120,6 +115,20 @@ namespace Portly
 
                 Interlocked.Exchange(ref _connected, 0);
                 throw;
+            }
+        }
+
+        private async Task<bool> OnPacketReceived(Packet packet)
+        {
+            switch (packet.Identifier.Id)
+            {
+                case (int)PacketType.KeepAlive:
+                    return false;
+                case (int)PacketType.Disconnect:
+                    await DisconnectInternalAsync(false);
+                    return false;
+                default:
+                    return true;
             }
         }
 

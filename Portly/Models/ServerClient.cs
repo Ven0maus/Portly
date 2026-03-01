@@ -9,14 +9,16 @@ namespace Portly.Models
     /// <summary>
     /// Represent a data container for a client that is connected to a server.
     /// </summary>
+    /// <param name="settings"></param>
     /// <param name="client"></param>
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
-    internal class ServerClient(TcpClient client, KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect) : IServerClient
+    internal class ServerClient(ServerSettings settings, TcpClient client, KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
         public CancellationTokenSource Cancellation { get; } = new();
+        public ClientRateLimiter ClientRateLimiter { get; } = new(settings.RateLimits);
 
         public Guid Id { get; } = Guid.NewGuid();
         internal IPacketCrypto? Crypto { get; set; }
@@ -44,13 +46,13 @@ namespace Portly.Models
             }
         }
 
-        public async Task DisconnectAsync()
+        public async Task DisconnectAsync(string reason = "")
         {
             if (Interlocked.Exchange(ref _disconnected, 1) == 1)
                 return;
 
             // Send disconnection packet before cancel
-            await SendPacketAsync(Packet.Create(PacketType.Disconnect, Array.Empty<byte>(), false));
+            await SendPacketAsync(Packet.Create(PacketType.Disconnect, reason, false));
             await DisconnectInternalAsync();
         }
 

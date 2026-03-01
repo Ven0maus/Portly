@@ -31,6 +31,7 @@ namespace Portly
         private readonly TrustServer _trustServer;
         private readonly CancellationTokenSource _cts;
         private readonly int _port;
+        private readonly ServerSettings _serverSettings;
 
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
@@ -65,6 +66,7 @@ namespace Portly
             _listener = new TcpListener(IPAddress.Any, _port);
             _trustServer = new TrustServer();
             _cts = new();
+            _serverSettings = new(); // TODO: Read from file
         }
 
         /// <summary>
@@ -105,7 +107,7 @@ namespace Portly
             foreach (var connection in _clients.Values.ToArray())
             {
                 // Send disconnection packet before cancel
-                await connection.SendPacketAsync(Packet.Create(PacketType.Disconnect, Array.Empty<byte>(), false));
+                await connection.SendPacketAsync(Packet.Create(PacketType.Disconnect, "Server is shutting down.", false));
                 connection.Cancellation.Cancel();
             }
 
@@ -210,7 +212,7 @@ namespace Portly
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(client, _keepAliveManager, OnClientDisconnected);
+            var connection = new ServerClient(_serverSettings, client, _keepAliveManager, OnClientDisconnected);
             _clients[connection.Id] = connection;
 
             var remoteEndpoint = client.Client.RemoteEndPoint;
@@ -251,8 +253,7 @@ namespace Portly
                             PacketHandler.ReadPacketsAsync(connection.Stream, async packet =>
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
-                                if (packet.Identifier.Id != (int)PacketType.KeepAlive)
-                                    await HandlePacketAsync(connection, packet);
+                                await HandlePacketAsync(connection, packet);
                             }, connection.Crypto, linkedCts.Token)
                         );
                     }
@@ -341,15 +342,31 @@ namespace Portly
 
         private static async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
+            // Rate limit non-system packets
+            if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
+            {
+                Console.WriteLine($"[{connection.Client.Client.RemoteEndPoint}]: rate limit exceeded, client was forcibly disconnected.");
+                await connection.DisconnectAsync("Rate limit exceeded.");
+                return;
+            }
+
             // Handle system packets
             switch (packet.Identifier.Id)
             {
+                case (int)PacketType.KeepAlive:
+                    return;
                 case (int)PacketType.Disconnect:
                     await connection.DisconnectInternalAsync();
                     break;
+                default:
+                    return;
             }
+        }
 
-            await Task.CompletedTask;
+        private static readonly HashSet<int> _systemPacketIds = Enum.GetValues<PacketType>().Select(a => (int)a).ToHashSet();
+        private static bool IsSystemPacket(Packet packet)
+        {
+            return _systemPacketIds.Contains(packet.Identifier.Id);
         }
     }
 }
