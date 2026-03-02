@@ -1,4 +1,4 @@
-﻿using Portly.Core.Configuration;
+﻿using Portly.Core.Configuration.Settings;
 
 namespace Portly.Core.Networking
 {
@@ -17,7 +17,7 @@ namespace Portly.Core.Networking
 
         private long _lastRefillTicks;
 
-        public ClientRateLimiter(ServerSettings.RateLimiting rateLimitSettings)
+        public ClientRateLimiter(RateLimitSettings rateLimitSettings)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rateLimitSettings.MaxPacketsPerSecond);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rateLimitSettings.MaxPacketsPerBurst);

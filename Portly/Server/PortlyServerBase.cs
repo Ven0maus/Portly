@@ -20,7 +20,6 @@ namespace Portly.Server
         private readonly TcpListener _listener;
         private readonly TrustServer _trustServer;
         private readonly CancellationTokenSource _cts;
-        private readonly ServerSettings _serverSettings;
 
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
@@ -63,18 +62,25 @@ namespace Portly.Server
         public event EventHandler<Guid>? OnClientDisconnected;
 
         /// <summary>
+        /// Server configuration
+        /// </summary>
+        public Configuration Configuration { get; }
+
+        /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="port"></param>
         /// <param name="logProvider"></param>
-        internal PortlyServerBase(int port, ILogProvider? logProvider = null)
+        /// <param name="configuration"></param>
+        internal PortlyServerBase(int port, Configuration? configuration = null, ILogProvider? logProvider = null)
         {
-            _port = port;
             LogProvider = logProvider;
+            Configuration = configuration ?? Configuration.Load(logProvider: LogProvider);
+
+            _port = port;
             _listener = new TcpListener(IPAddress.Any, _port);
             _trustServer = new TrustServer();
             _cts = new();
-            _serverSettings = new(); // TODO: Read from file
         }
 
         /// <summary>
@@ -115,7 +121,11 @@ namespace Portly.Server
             foreach (var connection in _clients.Values.ToArray())
             {
                 // Send disconnection packet before cancel
-                await connection.SendPacketAsync(Packet.Create(PacketType.Disconnect, "Server is shutting down.", false));
+                try
+                {
+                    await connection.SendPacketAsync(Packet.Create(PacketType.Disconnect, "Server is shutting down.", false));
+                }
+                catch (Exception) { }
                 connection.Cancellation.Cancel();
             }
 
@@ -225,7 +235,7 @@ namespace Portly.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(_serverSettings, client, _keepAliveManager, OnClientDisconnected, LogProvider);
+            var connection = new ServerClient(Configuration, client, _keepAliveManager, OnClientDisconnected, LogProvider);
             _clients[connection.Id] = connection;
 
             LogProvider?.Log($"[{connection.Id}]: Connected.");

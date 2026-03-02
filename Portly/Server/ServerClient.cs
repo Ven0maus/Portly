@@ -9,19 +9,19 @@ namespace Portly.Server
     /// <summary>
     /// Represent a data container for a client that is connected to a server.
     /// </summary>
-    /// <param name="settings"></param>
+    /// <param name="configuration"></param>
     /// <param name="client"></param>
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
     /// <param name="logProvider"></param>
-    internal class ServerClient(ServerSettings settings, TcpClient client,
+    internal class ServerClient(Configuration configuration, TcpClient client,
         KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect,
         ILogProvider? logProvider) : IServerClient
     {
         public TcpClient Client { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
         public CancellationTokenSource Cancellation { get; } = new();
-        public ClientRateLimiter ClientRateLimiter { get; } = new(settings.RateLimits);
+        public ClientRateLimiter ClientRateLimiter { get; } = new(configuration.RateLimits);
         public Task? ClientTask { get; set; }
         public ILogProvider? LogProvider { get; } = logProvider;
 
