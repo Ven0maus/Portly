@@ -23,6 +23,7 @@ namespace Portly.Server
 
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
+        private readonly ConcurrentDictionary<IPAddress, int> _connectionsPerIp = new();
         private static readonly HashSet<int> _systemPacketIds = [.. Enum.GetValues<PacketType>().Select(a => (int)a)];
         private readonly PacketRouter<IServerClient> _packetRouter = new();
 
@@ -51,15 +52,15 @@ namespace Portly.Server
         /// <summary>
         /// Raised when a packet is received from a client.
         /// </summary>
-        public event EventHandler<Guid, Packet>? OnPacketReceived;
+        public event EventHandler<IServerClient, Packet>? OnPacketReceived;
         /// <summary>
         /// Raised when a client is connected to the server after the handshake is succesful.
         /// </summary>
-        public event EventHandler<Guid>? OnClientConnected;
+        public event EventHandler<IServerClient>? OnClientConnected;
         /// <summary>
         /// Raised when a client is disconnected from the server.
         /// </summary>
-        public event EventHandler<Guid>? OnClientDisconnected;
+        public event EventHandler<IServerClient>? OnClientDisconnected;
 
         /// <summary>
         /// Server configuration
@@ -235,9 +236,42 @@ namespace Portly.Server
             await SendToClientAsync(clientId, (Packet)packet);
         }
 
+        private void OnClientDisconnectedImpl(object? sender, IServerClient connection)
+        {
+            DecrementConnection(connection.IpAddress);
+            OnClientDisconnected?.Invoke(sender, connection);
+        }
+
+        private void DecrementConnection(IPAddress ip)
+        {
+            while (true)
+            {
+                if (_connectionsPerIp.TryGetValue(ip, out int current))
+                {
+                    if (current <= 1)
+                    {
+                        // Try to remove if count is 0 or 1
+                        if (_connectionsPerIp.TryRemove(ip, out _))
+                            break; // success
+                    }
+                    else
+                    {
+                        // Try to update the value atomically
+                        if (_connectionsPerIp.TryUpdate(ip, current - 1, current))
+                            break; // success
+                    }
+                }
+                else
+                {
+                    // No entry exists, nothing to do
+                    break;
+                }
+            }
+        }
+
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(Configuration, client, _keepAliveManager, OnClientDisconnected, LogProvider);
+            var connection = new ServerClient(Configuration, client, _keepAliveManager, OnClientDisconnectedImpl, LogProvider);
             _clients[connection.Id] = connection;
 
             LogProvider?.Log($"[{connection.Id}]: Connecting to server..");
@@ -289,9 +323,11 @@ namespace Portly.Server
 
                 var clientTask = Task.Run(async () =>
                 {
-                    var remoteEndpoint = connection.Client.Client.RemoteEndPoint;
+                    var remoteEndpoint = connection.TcpClient.Client.RemoteEndPoint;
                     try
                     {
+                        // Incrmeent ip connection count
+                        _connectionsPerIp.AddOrUpdate(connection.IpAddress, 1, (_, current) => current + 1);
                         // Register connection
                         _keepAliveManager.Register(connection);
 
@@ -314,7 +350,7 @@ namespace Portly.Server
                     }
                 }, CancellationToken.None);
 
-                OnClientConnected?.Invoke(this, connection.Id);
+                OnClientConnected?.Invoke(this, connection);
             }
             catch (Exception ex)
             {
@@ -338,12 +374,25 @@ namespace Portly.Server
             if (packet == null || packet.Identifier.Id != (int)PacketType.LiteHandshake || packet.Payload == null)
                 return (false, null);
 
+            // Protocol check
             var protocolVersion = packet.As<Version>().Payload;
             if (protocolVersion != PacketProtocol.Version)
                 return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {PacketProtocol.Version}).");
 
+            // Max connections
             if (_clients.Count >= Configuration.ConnectionSettings.MaxConnections)
                 return (false, "Server is full.");
+
+            // Verify if tcp client
+            var remoteEndPoint = connection.TcpClient.Client.RemoteEndPoint as IPEndPoint;
+            if (remoteEndPoint == null)
+                return (false, "Unable to determine client IP.");
+
+            // Verify max connections per ip
+            var clientIp = remoteEndPoint.Address;
+            _connectionsPerIp.TryGetValue(clientIp, out int connectionsFromIp);
+            if (connectionsFromIp >= Configuration.ConnectionSettings.MaxConnectionsPerIp)
+                return (false, $"Too many connections from {clientIp}");
 
             return (true, null);
         }
@@ -412,7 +461,7 @@ namespace Portly.Server
             if (task != null)
                 await task;
 
-            OnPacketReceived?.Invoke(connection.Id, packet);
+            OnPacketReceived?.Invoke(connection, packet);
         }
 
         private static bool IsSystemPacket(Packet packet)

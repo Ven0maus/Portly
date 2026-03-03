@@ -1,4 +1,5 @@
 ﻿using Portly.Core.PacketHandling;
+using System.Net;
 
 namespace Portly.Core.Interfaces
 {
@@ -11,6 +12,11 @@ namespace Portly.Core.Interfaces
         /// Unique client identifier
         /// </summary>
         Guid Id { get; }
+
+        /// <summary>
+        /// The IPAddress of the client
+        /// </summary>
+        IPAddress IpAddress { get; }
 
         /// <summary>
         /// Sends a packet asynchronously to the client.

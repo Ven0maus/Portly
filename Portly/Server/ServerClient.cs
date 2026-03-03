@@ -2,6 +2,7 @@
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
+using System.Net;
 using System.Net.Sockets;
 
 namespace Portly.Server
@@ -15,11 +16,13 @@ namespace Portly.Server
     /// <param name="onDisconnect"></param>
     /// <param name="logProvider"></param>
     internal class ServerClient(ServerConfiguration configuration, TcpClient client,
-        KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect,
+        KeepAliveManager<ServerClient> keepAliveManager, EventHandler<IServerClient>? onDisconnect,
         ILogProvider? logProvider) : IServerClient
     {
-        public TcpClient Client { get; } = client;
+        public TcpClient TcpClient { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
+        public IPAddress IpAddress { get; } = (client.Client.RemoteEndPoint as IPEndPoint
+                 ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address;
         public CancellationTokenSource Cancellation { get; } = new();
         public ClientRateLimiter ClientRateLimiter { get; } = new(configuration.RateLimits);
         public Task? ClientTask { get; set; }
@@ -32,11 +35,11 @@ namespace Portly.Server
         private readonly KeepAliveManager<ServerClient> _keepAliveManager = keepAliveManager;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
 
-        private readonly EventHandler<Guid>? _onDisconnect = onDisconnect;
+        private readonly EventHandler<IServerClient>? _onDisconnect = onDisconnect;
 
         public async Task SendPacketAsync(Packet packet)
         {
-            if (!Client.Connected)
+            if (!TcpClient.Connected)
                 throw new InvalidOperationException("Client not connected.");
 
             await _sendLock.WaitAsync();
@@ -73,10 +76,10 @@ namespace Portly.Server
 
             try { Cancellation.Cancel(); } catch { }
             try { Stream.Close(); } catch { }
-            try { Client.Close(); } catch { }
+            try { TcpClient.Close(); } catch { }
 
             _keepAliveManager.Unregister(this);
-            _onDisconnect?.Invoke(this, Id);
+            _onDisconnect?.Invoke(this, this);
         }
     }
 }
