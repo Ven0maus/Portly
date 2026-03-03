@@ -17,6 +17,13 @@
         public int MaxConnectionsPerIp { get; set; } = 1;
 
         /// <summary>
+        /// Maximum number of incoming connections that can be queued in the pre-handshake (pending) state
+        /// before new connections are rejected. This helps absorb short connection spikes while protecting
+        /// the server from overload.
+        /// </summary>
+        public int MaxPendingConnectionBacklog { get; set; } = 100;
+
+        /// <summary>
         /// ConnectTimeout
         /// </summary>
         public int ConnectTimeoutSeconds { get; set; } = 10;

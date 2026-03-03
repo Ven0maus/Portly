@@ -10,5 +10,8 @@ namespace Portly.Core.Authentication.Handshake
 
         [Key(1)]
         public byte[] ClientEphemeralKey { get; set; } = [];
+
+        [Key(2)]
+        public byte[] ProtocolVersion { get; set; } = [];
     }
 }

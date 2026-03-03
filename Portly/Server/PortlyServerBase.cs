@@ -89,7 +89,7 @@ namespace Portly.Server
         /// <returns></returns>
         public async Task StartAsync()
         {
-            _listener.Start();
+            _listener.Start(Configuration.ConnectionSettings.MaxPendingConnectionBacklog);
             LogProvider?.Log($"Server started on port {_port}.");
 
             _ = Task.Run(async () =>
@@ -100,6 +100,8 @@ namespace Portly.Server
                     while (!_cts.Token.IsCancellationRequested)
                     {
                         var client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                        if (Configuration.ConnectionSettings.NoTcpDelay)
+                            client.NoDelay = true;
                         _ = HandleClientAsync(client, _cts.Token);
                     }
                 }
@@ -370,7 +372,8 @@ namespace Portly.Server
             // 4. Build signed data
             byte[] signedData = request.Payload.Challenge.Combine(
                 request.Payload.ClientEphemeralKey,
-                keyExchange.PublicKey
+                keyExchange.PublicKey,
+                request.Payload.ProtocolVersion
             );
 
             // 5. Sign (binds identity + key exchange)

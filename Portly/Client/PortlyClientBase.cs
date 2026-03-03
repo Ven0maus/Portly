@@ -3,6 +3,7 @@ using Portly.Core.Authentication.Handshake;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
+using Portly.Core.Utilities;
 using Portly.Extensions;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -32,6 +33,7 @@ namespace Portly.Client
         private CancellationTokenSource? _cts;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private IPacketCrypto? _crypto;
+        private readonly bool _noDelay;
         private readonly PacketRouter<IClient> _packetRouter = new();
 
         /// <summary>
@@ -65,8 +67,10 @@ namespace Portly.Client
         /// Constructor
         /// </summary>
         /// <param name="logProvider"></param>
-        internal PortlyClientBase(ILogProvider? logProvider)
+        /// <param name="noDelay">Enable if low latency matters (games, real-time systems, RPC)</param>
+        internal PortlyClientBase(ILogProvider? logProvider, bool noDelay = false)
         {
+            _noDelay = noDelay;
             LogProvider = logProvider;
         }
 
@@ -83,6 +87,9 @@ namespace Portly.Client
             try
             {
                 client = new TcpClient();
+                if (_noDelay)
+                    client.NoDelay = true;
+
                 await client.ConnectAsync(host, port);
                 stream = client.GetStream();
 
@@ -254,7 +261,8 @@ namespace Portly.Client
             var clientHandshake = new ClientHandshake
             {
                 Challenge = challenge,
-                ClientEphemeralKey = keyExchange.PublicKey
+                ClientEphemeralKey = keyExchange.PublicKey,
+                ProtocolVersion = VersionUtils.ToBytes(PacketProtocol.Version)
             };
 
             await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
@@ -278,7 +286,8 @@ namespace Portly.Client
 
             byte[] signedData = challenge.Combine(
                 keyExchange.PublicKey,
-                response.Payload.ServerEphemeralKey
+                response.Payload.ServerEphemeralKey,
+                clientHandshake.ProtocolVersion
             );
 
             if (!ecdsa.VerifyData(signedData, response.Payload.Signature, HashAlgorithmName.SHA256))
