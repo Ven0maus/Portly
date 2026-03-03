@@ -22,8 +22,9 @@ namespace Portly.Core.Interfaces
         /// Sends a packet asynchronously to the client.
         /// </summary>
         /// <param name="packet"></param>
+        /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task SendPacketAsync(Packet packet);
+        Task SendPacketAsync(Packet packet, CancellationToken cancellationToken);
 
         /// <summary>
         /// Disconnects the client from the server, and informing them with a disconnect packet.

@@ -13,7 +13,7 @@ namespace Portly.Client
     /// and performs a challenge-response to ensure authenticity.
     ///
     /// After a successful handshake, it continuously listens for incoming packets
-    /// using <see cref="PacketProtocol"/> and allows sending packets over the connection.
+    /// using <see cref="IPacketProtocol"/> and allows sending packets over the connection.
     ///
     /// This implementation does not include encryption but ensures server identity
     /// verification as a foundation for secure communication.
@@ -21,7 +21,7 @@ namespace Portly.Client
     public class PortlyClient : PortlyClientBase
     {
         /// <inheritdoc/>
-        public PortlyClient(ILogProvider? logProvider, bool noDelay = false) : base(logProvider, noDelay)
+        public PortlyClient(ILogProvider? logProvider, bool noDelay = false) : base(null, logProvider, noDelay)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);

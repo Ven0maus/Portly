@@ -6,6 +6,8 @@
     /// <param name="enableDebug">If debug level should be enabled or not.</param>
     public class ConsoleLogger(bool enableDebug = false) : LogProviderBase(enableDebug)
     {
+        private readonly Lock _lock = new();
+
         /// <inheritdoc/>
         protected override void Write(string message, LogLevel logLevel)
         {
@@ -28,12 +30,15 @@
             }
         }
 
-        private static void WriteWithColor(string message, ConsoleColor color)
+        private void WriteWithColor(string message, ConsoleColor color)
         {
-            var previousColor = Console.ForegroundColor;
-            Console.ForegroundColor = color;
-            Console.WriteLine(message);
-            Console.ForegroundColor = previousColor;
+            lock (_lock)
+            {
+                var previousColor = Console.ForegroundColor;
+                Console.ForegroundColor = color;
+                Console.WriteLine(message);
+                Console.ForegroundColor = previousColor;
+            }
         }
     }
 }

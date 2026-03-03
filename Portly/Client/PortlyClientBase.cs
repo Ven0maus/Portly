@@ -3,6 +3,7 @@ using Portly.Core.Authentication.Handshake;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
+using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Utilities;
 using Portly.Extensions;
 using System.Net.Sockets;
@@ -19,7 +20,7 @@ namespace Portly.Client
     /// and performs a challenge-response to ensure authenticity.
     ///
     /// After a successful handshake, it continuously listens for incoming packets
-    /// using <see cref="PacketProtocol"/> and allows sending packets over the connection.
+    /// using <see cref="IPacketProtocol"/> and allows sending packets over the connection.
     ///
     /// This implementation does not include encryption but ensures server identity
     /// verification as a foundation for secure communication.
@@ -32,9 +33,10 @@ namespace Portly.Client
         private int _connected = 0;
         private CancellationTokenSource? _cts;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
-        private IPacketCrypto? _crypto;
+        private IEncryptionProvider? _encryptionProvider;
         private readonly bool _noDelay;
         private readonly PacketRouter<IClient> _packetRouter = new();
+        private readonly IPacketProtocol _packetProtocol;
 
         /// <summary>
         /// The log provider that is used.
@@ -66,10 +68,12 @@ namespace Portly.Client
         /// <summary>
         /// Constructor
         /// </summary>
+        /// <param name="packetProtocol"></param>
         /// <param name="logProvider"></param>
         /// <param name="noDelay">Enable if low latency matters (games, real-time systems, RPC)</param>
-        internal PortlyClientBase(ILogProvider? logProvider, bool noDelay = false)
+        internal PortlyClientBase(IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null, bool noDelay = false)
         {
+            _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), logProvider: logProvider);
             _noDelay = noDelay;
             LogProvider = logProvider;
         }
@@ -103,14 +107,14 @@ namespace Portly.Client
                 _cts = cts;
 
                 var token = cts.Token;
-                var receiveTask = PacketProtocol.ReadPacketsAsync(stream, async packet =>
+                var receiveTask = _packetProtocol.ReadPacketsAsync(stream, async packet =>
                 {
                     _keepAliveManager.UpdateLastReceived(this);
                     var task = Router.RouteAsync(this, packet);
                     if (task != null)
                         await task;
                     OnPacketReceived?.Invoke(this, packet);
-                }, 30, null, _crypto, LogProvider, null, cts.Token);
+                }, cts.Token, _encryptionProvider);
 
                 // Update initial state
                 _keepAliveManager.Register(this);
@@ -165,7 +169,7 @@ namespace Portly.Client
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(stream, packet, 30, null, _crypto, LogProvider);
+                await _packetProtocol.SendPacketAsync(stream, packet, default, _encryptionProvider);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
@@ -228,11 +232,11 @@ namespace Portly.Client
             // Send protocol version
             await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
                 PacketType.LiteHandshake,
-                PacketProtocol.Version,
+                _packetProtocol.Version,
                 false
             ));
 
-            var result = await PacketProtocol.ReceiveSinglePacketAsync(stream, logProvider: LogProvider);
+            var result = await _packetProtocol.ReceiveSinglePacketAsync(stream, default, _encryptionProvider);
             if (result == null || result.Identifier.Id != (int)PacketType.LiteHandshake || result.Payload == null)
                 throw new Exception("Invalid lite handshake packet.");
 
@@ -244,7 +248,7 @@ namespace Portly.Client
         private async Task PerformSecureHandshakeAsync(NetworkStream stream, string host, int port)
         {
             // 1. Receive server identity public key
-            var publicKeyPacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
+            var publicKeyPacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, default, _encryptionProvider);
             var publicKey = publicKeyPacket.Payload;
 
             if (publicKeyPacket == null || publicKeyPacket.Identifier.Id != (int)PacketType.SecureHandshake || publicKey == null)
@@ -262,7 +266,7 @@ namespace Portly.Client
             {
                 Challenge = challenge,
                 ClientEphemeralKey = keyExchange.PublicKey,
-                ProtocolVersion = VersionUtils.ToBytes(PacketProtocol.Version)
+                ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
             };
 
             await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
@@ -272,7 +276,7 @@ namespace Portly.Client
             ));
 
             // 4. Receive server response
-            var responsePacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
+            var responsePacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, default, _encryptionProvider);
             if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.SecureHandshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 
@@ -294,7 +298,7 @@ namespace Portly.Client
                 throw new Exception("Invalid server signature. Possible MITM attack.");
 
             // 6. Derive session key
-            _crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
+            _encryptionProvider = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
         }
     }
 }

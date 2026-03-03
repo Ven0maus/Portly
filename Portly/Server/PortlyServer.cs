@@ -14,7 +14,7 @@ namespace Portly.Server
     /// establish the server's identity by sending its public key and signing a client-provided challenge.
     ///
     /// After a successful handshake, the server continuously reads and processes packets using
-    /// <see cref="PacketProtocol"/>, enabling efficient, length-prefixed communication over the network.
+    /// <see cref="IPacketProtocol"/>, enabling efficient, length-prefixed communication over the network.
     ///
     /// This implementation does not include encryption, but establishes the foundation for secure
     /// communication by verifying server identity during the initial connection phase.

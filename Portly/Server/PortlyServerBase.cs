@@ -4,6 +4,7 @@ using Portly.Core.Configuration;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
+using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Utilities.Logging;
 using Portly.Extensions;
 using System.Collections.Concurrent;
@@ -30,6 +31,7 @@ namespace Portly.Server
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
 
         private readonly int _port;
+        private readonly IPacketProtocol _packetProtocol;
 
         /// <summary>
         /// The log provider that is used.
@@ -69,15 +71,17 @@ namespace Portly.Server
         /// Constructor
         /// </summary>
         /// <param name="port"></param>
-        /// <param name="logProvider"></param>
         /// <param name="configuration"></param>
-        internal PortlyServerBase(int port, ServerConfiguration? configuration = null, ILogProvider? logProvider = null)
+        /// <param name="packetProtocol"></param>
+        /// <param name="logProvider"></param>
+        internal PortlyServerBase(int port, ServerConfiguration? configuration = null, IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null)
         {
             LogProvider = logProvider;
             Configuration = configuration ?? ServerConfiguration.Load(logProvider: LogProvider);
             Configuration.Validate();
 
             _port = port;
+            _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(Configuration.ConnectionSettings, logProvider);
             _listener = new TcpListener(IPAddress.Any, _port);
             _trustServer = new TrustServer();
             _cts = new();
@@ -276,7 +280,7 @@ namespace Portly.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(Configuration, client, _keepAliveManager, OnClientDisconnectedImpl, LogProvider);
+            var connection = new ServerClient(_packetProtocol, Configuration, client, _keepAliveManager, OnClientDisconnectedImpl);
             _clients[connection.Id] = connection;
 
             LogProvider?.Log($"[{connection.Id}]: Connecting to server..");
@@ -336,11 +340,11 @@ namespace Portly.Server
                         // Register connection
                         _keepAliveManager.Register(connection);
 
-                        await PacketProtocol.ReadPacketsAsync(connection.Stream, async packet =>
+                        await _packetProtocol.ReadPacketsAsync(connection.Stream, async packet =>
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
                                 await HandlePacketAsync(connection, packet);
-                            }, Configuration.ConnectionSettings.IdleTimeoutSeconds, Configuration.ConnectionSettings.MaxRequestSizeBytes, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
+                            }, linkedCts.Token, connection.EncryptionProvider);
                     }
                     catch (OperationCanceledException) { }
                     catch (Exception ex)
@@ -380,11 +384,10 @@ namespace Portly.Server
             Packet? packet;
             try
             {
-                packet = await PacketProtocol.ReceiveSinglePacketAsync(
+                packet = await _packetProtocol.ReceiveSinglePacketAsync(
                     connection.Stream,
-                    logProvider: LogProvider,
-                    clientId: connection.Id,
-                    token: cts.Token
+                    cts.Token,
+                    connection.EncryptionProvider
                 );
             }
             catch (OperationCanceledException)
@@ -401,8 +404,8 @@ namespace Portly.Server
 
             // Protocol check
             var protocolVersion = packet.As<Version>().Payload;
-            if (protocolVersion != PacketProtocol.Version)
-                return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {PacketProtocol.Version}).");
+            if (protocolVersion != _packetProtocol.Version)
+                return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {_packetProtocol.Version}).");
 
             // Max connections
             if (_clients.Count >= Configuration.ConnectionSettings.MaxConnections)
@@ -435,12 +438,10 @@ namespace Portly.Server
             Packet? requestPacket;
             try
             {
-                requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(
+                requestPacket = await _packetProtocol.ReceiveSinglePacketAsync(
                     connection.Stream,
-                    connection.Crypto,
-                    connection.LogProvider,
-                    connection.Id,
-                    cts.Token
+                    cts.Token,
+                    connection.EncryptionProvider
                 );
             }
             catch (OperationCanceledException)
@@ -484,7 +485,7 @@ namespace Portly.Server
             ));
 
             // 7. Derive session key
-            connection.Crypto = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey));
+            connection.EncryptionProvider = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey));
 
             return true;
         }

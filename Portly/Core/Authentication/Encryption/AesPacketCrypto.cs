@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 
 namespace Portly.Core.Authentication.Encryption
 {
-    internal sealed class AesPacketCrypto(byte[] key) : IPacketCrypto
+    internal sealed class AesPacketCrypto(byte[] key) : IEncryptionProvider
     {
         private readonly byte[] _key = key;
 
