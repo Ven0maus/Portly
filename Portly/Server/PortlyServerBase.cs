@@ -238,27 +238,49 @@ namespace Portly.Server
             var connection = new ServerClient(Configuration, client, _keepAliveManager, OnClientDisconnected, LogProvider);
             _clients[connection.Id] = connection;
 
-            LogProvider?.Log($"[{connection.Id}]: Connected.");
+            LogProvider?.Log($"[{connection.Id}]: Connecting to server..");
 
             try
             {
                 try
                 {
-                    if (!await PerformHandshakeAsync(connection))
+                    var (resultLiteHandshake, validReason) = await PerformLiteHandshakeAsync(connection);
+                    if (!resultLiteHandshake)
                     {
-                        LogProvider?.Log($"[{connection.Id}]: Disconnected (handshake rejected).", LogLevel.Warning);
+                        if (validReason != null)
+                        {
+                            await connection.SendPacketAsync(Packet.Create(PacketType.LiteHandshake, validReason, false));
+                            await connection.DisconnectInternalAsync();
+                            LogProvider?.Log($"[{connection.Id}]: Connection failed ({validReason}).", LogLevel.Warning);
+                            return;
+                        }
+                        else
+                        {
+                            await connection.DisconnectInternalAsync();
+                            LogProvider?.Log($"[{connection.Id}]: Connection failed (handshake rejected).", LogLevel.Warning);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        await connection.SendPacketAsync(Packet.Create(PacketType.LiteHandshake, "OK", false));
+                    }
+
+                    if (!await PerformSecureHandshakeAsync(connection))
+                    {
                         await connection.DisconnectInternalAsync();
+                        LogProvider?.Log($"[{connection.Id}]: Connection failed (handshake rejected).", LogLevel.Warning);
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogProvider?.Log($"[{connection.Id}]: Disconnected (handshake error: {ex.Message})", LogLevel.Error);
                     await connection.DisconnectInternalAsync();
+                    LogProvider?.Log($"[{connection.Id}]: Connection failed (handshake error: {ex.Message})", LogLevel.Error);
                     return;
                 }
 
-                LogProvider?.Log($"[{connection.Id}]: Handshake successful");
+                LogProvider?.Log($"[{connection.Id}]: Connected sucessfully.");
 
                 // Start loops
                 var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(serverToken, connection.Cancellation.Token);
@@ -308,16 +330,32 @@ namespace Portly.Server
             }
         }
 
-        private async Task<bool> PerformHandshakeAsync(ServerClient connection)
+        private async Task<(bool result, string? validReason)> PerformLiteHandshakeAsync(ServerClient connection)
+        {
+            var packet = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, logProvider: LogProvider, clientId: connection.Id);
+            if (packet == null || packet.Identifier.Id != (int)PacketType.LiteHandshake || packet.Payload == null)
+                return (false, null);
+
+            var protocolVersion = packet.As<Version>().Payload;
+            if (protocolVersion != PacketProtocol.Version)
+                return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {PacketProtocol.Version}).");
+
+            if (_clients.Count >= Configuration.ConnectionSettings.MaxConnections)
+                return (false, "Server is full.");
+
+            return (true, null);
+        }
+
+        private async Task<bool> PerformSecureHandshakeAsync(ServerClient connection)
         {
             // 1. Send server identity public key
             byte[] publicKey = _trustServer.GetPublicKey();
 
-            await connection.SendPacketAsync(Packet.Create(PacketType.Handshake, publicKey, false));
+            await connection.SendPacketAsync(Packet.Create(PacketType.SecureHandshake, publicKey, false));
 
             // 2. Receive client handshake
             var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto, connection.LogProvider, connection.Id);
-            if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.Handshake || requestPacket.Payload == null)
+            if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.SecureHandshake || requestPacket.Payload == null)
                 return false;
 
             var request = requestPacket.As<ClientHandshake>();
@@ -346,7 +384,7 @@ namespace Portly.Server
             };
 
             await connection.SendPacketAsync(Packet<ServerHandshake>.Create(
-                PacketType.Handshake,
+                PacketType.SecureHandshake,
                 response,
                 false
             ));

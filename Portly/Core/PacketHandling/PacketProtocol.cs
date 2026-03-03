@@ -19,6 +19,11 @@ namespace Portly.Core.PacketHandling
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
         /// <summary>
+        /// The protcol version
+        /// </summary>
+        public static readonly Version Version = new(1, 0, 0);
+
+        /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
         internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, int? maxPacketSize = null,
@@ -62,7 +67,7 @@ namespace Portly.Core.PacketHandling
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake);
+                ArrayPool<byte>.Shared.Return(buffer, packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake);
             }
         }
 
@@ -121,7 +126,7 @@ namespace Portly.Core.PacketHandling
                             throw new IOException("Failed to deserialize packet: " + ex.Message);
                         }
 
-                        if (packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake)
+                        if (packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake)
                             clearDataBufferAfterUse = true;
                     }
                     finally
@@ -184,7 +189,7 @@ namespace Portly.Core.PacketHandling
                 try
                 {
                     packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: token);
-                    clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.Handshake;
+                    clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
                 }
                 catch (Exception ex)
                 {

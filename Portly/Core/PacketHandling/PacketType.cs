@@ -3,7 +3,8 @@
     internal enum PacketType
     {
         KeepAlive,
-        Handshake,
+        LiteHandshake,
+        SecureHandshake,
         Disconnect
     }
 }

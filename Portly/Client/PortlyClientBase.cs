@@ -87,7 +87,8 @@ namespace Portly.Client
                 stream = client.GetStream();
 
                 // --- HANDSHAKE ---
-                await PerformHandshakeAsync(stream, host, port);
+                await PerformLiteHandshakeAsync(stream);
+                await PerformSecureHandshakeAsync(stream, host, port);
 
                 // Assign ONLY after successful handshake
                 _client = client;
@@ -215,14 +216,32 @@ namespace Portly.Client
             }
         }
 
-        private async Task PerformHandshakeAsync(NetworkStream stream, string host, int port)
+        private async Task PerformLiteHandshakeAsync(NetworkStream stream)
+        {
+            // Send protocol version
+            await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
+                PacketType.LiteHandshake,
+                PacketProtocol.Version,
+                false
+            ));
+
+            var result = await PacketProtocol.ReceiveSinglePacketAsync(stream, logProvider: LogProvider);
+            if (result == null || result.Identifier.Id != (int)PacketType.LiteHandshake || result.Payload == null)
+                throw new Exception("Invalid lite handshake packet.");
+
+            var payload = result.As<string>().Payload;
+            if (payload != "OK")
+                throw new Exception(payload ?? "Unable to connect to the server, invalid lite handshake response received.");
+        }
+
+        private async Task PerformSecureHandshakeAsync(NetworkStream stream, string host, int port)
         {
             // 1. Receive server identity public key
             var publicKeyPacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
             var publicKey = publicKeyPacket.Payload;
 
-            if (publicKeyPacket.Identifier.Id != (int)PacketType.Handshake || publicKey == null)
-                throw new Exception("Invalid handshake packet: " + publicKeyPacket.Identifier.Id);
+            if (publicKeyPacket == null || publicKeyPacket.Identifier.Id != (int)PacketType.SecureHandshake || publicKey == null)
+                throw new Exception("Invalid handshake packet.");
 
             if (!_trustClient.VerifyOrTrustServer(host, port, publicKey))
                 throw new Exception("Server identity verification failed.");
@@ -239,14 +258,14 @@ namespace Portly.Client
             };
 
             await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
-                PacketType.Handshake,
+                PacketType.SecureHandshake,
                 clientHandshake,
                 false
             ));
 
             // 4. Receive server response
             var responsePacket = await PacketProtocol.ReceiveSinglePacketAsync(stream, _crypto, LogProvider);
-            if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.Handshake || responsePacket.Payload == null)
+            if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.SecureHandshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 
             var response = responsePacket.As<ServerHandshake>();
