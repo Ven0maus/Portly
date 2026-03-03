@@ -64,7 +64,7 @@ namespace Portly.Server
         /// <summary>
         /// Server configuration
         /// </summary>
-        public Configuration Configuration { get; }
+        public ServerConfiguration Configuration { get; }
 
         /// <summary>
         /// Constructor
@@ -72,10 +72,10 @@ namespace Portly.Server
         /// <param name="port"></param>
         /// <param name="logProvider"></param>
         /// <param name="configuration"></param>
-        internal PortlyServerBase(int port, Configuration? configuration = null, ILogProvider? logProvider = null)
+        internal PortlyServerBase(int port, ServerConfiguration? configuration = null, ILogProvider? logProvider = null)
         {
             LogProvider = logProvider;
-            Configuration = configuration ?? Configuration.Load(logProvider: LogProvider);
+            Configuration = configuration ?? ServerConfiguration.Load(logProvider: LogProvider);
 
             _port = port;
             _listener = new TcpListener(IPAddress.Any, _port);
@@ -275,7 +275,7 @@ namespace Portly.Server
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
                                 await HandlePacketAsync(connection, packet);
-                            }, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
+                            }, Configuration.ConnectionSettings.MaxRequestSizeBytes, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
                     }
                     catch (OperationCanceledException) { }
                     catch (Exception ex)

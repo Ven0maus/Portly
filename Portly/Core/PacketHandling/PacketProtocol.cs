@@ -12,7 +12,6 @@ namespace Portly.Core.PacketHandling
     /// </summary>
     public static class PacketProtocol
     {
-        private static int _maxPacketSize = 64 * 1024;
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
         private static readonly Packet _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false);
 
@@ -20,18 +19,10 @@ namespace Portly.Core.PacketHandling
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
         /// <summary>
-        /// Allows overriding the max packet size. <br>Default: 64 KB</br>
-        /// </summary>
-        /// <param name="maxPacketSize"></param>
-        public static void SetMaxPacketSize(int maxPacketSize = 64 * 1024)
-        {
-            _maxPacketSize = maxPacketSize;
-        }
-
-        /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
-        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null)
+        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, int? maxPacketSize = null,
+            IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
@@ -53,7 +44,7 @@ namespace Portly.Core.PacketHandling
 
             byte[] payload = packet.SerializedPacket ??= MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
 
-            if (payload.Length > _maxPacketSize)
+            if (maxPacketSize != null && payload.Length > maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");
 
             logProvider?.Log(clientId != null ? $"[{clientId}]: Sending packet of size {payload.Length}." : $"Sending packet of size {payload.Length}.", LogLevel.Debug);
@@ -78,7 +69,7 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Continuously reads packets from a NetworkStream, using ArrayPool buffers to reduce allocations.
         /// </summary>
-        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
+        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, int? maxPacketSize = null, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -97,7 +88,7 @@ namespace Portly.Core.PacketHandling
 
                 // Packet length validation
                 if (packetLength < 0) throw new IOException("Invalid packet length");
-                if (packetLength > _maxPacketSize) throw new IOException($"Packet too large: {packetLength} bytes");
+                if (packetLength > maxPacketSize) throw new IOException($"Packet too large: {packetLength} bytes");
 
                 Packet packet;
                 if (packetLength == 0)

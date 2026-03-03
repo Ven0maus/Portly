@@ -9,10 +9,10 @@ namespace Portly.Core.Configuration
         private readonly ISerializer _serializer = serializer ?? new XmlProvider();
         private readonly ILogProvider? _logProvider = logProvider;
 
-        public Configuration Load()
+        public ServerConfiguration Load()
         {
             var file = LoadOrCreate<ConfigurationFile>("server_config");
-            var configuration = new Configuration
+            var configuration = new ServerConfiguration
             {
                 RateLimits = file.RateLimits,
                 IpBlacklist = LoadList("ip-blacklist.txt"),
@@ -21,10 +21,13 @@ namespace Portly.Core.Configuration
 
             _logProvider?.Log("Loaded configuration files.", LogLevel.Debug);
 
+            // Save for compatibility in newer versions (eg, new defaults added)
+            Save(configuration);
+
             return configuration;
         }
 
-        public void Save(Configuration config)
+        public void Save(ServerConfiguration config)
         {
             var file = new ConfigurationFile
             {

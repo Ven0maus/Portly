@@ -102,7 +102,7 @@ namespace Portly.Client
                     if (task != null)
                         await task;
                     OnPacketReceived?.Invoke(this, packet);
-                }, _crypto, LogProvider, null, cts.Token);
+                }, null, _crypto, LogProvider, null, cts.Token);
 
                 // Update initial state
                 _keepAliveManager.Register(this);
@@ -157,7 +157,7 @@ namespace Portly.Client
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(stream, packet, _crypto, LogProvider);
+                await PacketProtocol.SendPacketAsync(stream, packet, null, _crypto, LogProvider);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally

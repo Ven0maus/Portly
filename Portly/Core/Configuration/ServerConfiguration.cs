@@ -7,8 +7,12 @@ namespace Portly.Core.Configuration
     /// <summary>
     /// Server configuration options
     /// </summary>
-    public sealed class Configuration
+    public sealed class ServerConfiguration
     {
+        /// <summary>
+        /// Connection configuration options.
+        /// </summary>
+        public ConnectionSettings ConnectionSettings { get; set; } = new();
         /// <summary>
         /// Rate limit configuration options.
         /// </summary>
@@ -25,7 +29,7 @@ namespace Portly.Core.Configuration
         /// <summary>
         /// Loads all configuration from disk.
         /// </summary>
-        public static Configuration Load(ISerializer? serializer = null, ILogProvider? logProvider = null)
+        public static ServerConfiguration Load(ISerializer? serializer = null, ILogProvider? logProvider = null)
             => new ConfigurationService(serializer, logProvider).Load();
 
         /// <summary>

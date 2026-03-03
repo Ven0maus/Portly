@@ -14,7 +14,7 @@ namespace Portly.Server
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
     /// <param name="logProvider"></param>
-    internal class ServerClient(Configuration configuration, TcpClient client,
+    internal class ServerClient(ServerConfiguration configuration, TcpClient client,
         KeepAliveManager<ServerClient> keepAliveManager, EventHandler<Guid>? onDisconnect,
         ILogProvider? logProvider) : IServerClient
     {
@@ -42,7 +42,7 @@ namespace Portly.Server
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(Stream, packet, Crypto, LogProvider, Id);
+                await PacketProtocol.SendPacketAsync(Stream, packet, configuration.ConnectionSettings.MaxRequestSizeBytes, Crypto, LogProvider, Id);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
