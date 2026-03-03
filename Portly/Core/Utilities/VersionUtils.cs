@@ -6,10 +6,15 @@
         public static byte[] ToBytes(this Version version)
         {
             byte[] bytes = new byte[16];
+
+            // Major and minor are always >= 0
             Array.Copy(BitConverter.GetBytes(version.Major), 0, bytes, 0, 4);
             Array.Copy(BitConverter.GetBytes(version.Minor), 0, bytes, 4, 4);
+
+            // Build and Revision can be -1 if not specified
             Array.Copy(BitConverter.GetBytes(version.Build), 0, bytes, 8, 4);
             Array.Copy(BitConverter.GetBytes(version.Revision), 0, bytes, 12, 4);
+
             return bytes;
         }
 
@@ -24,7 +29,19 @@
             int build = BitConverter.ToInt32(bytes, 8);
             int revision = BitConverter.ToInt32(bytes, 12);
 
-            return new Version(major, minor, build, revision);
+            // Use correct constructor overload based on which components are valid
+            if (build < 0)
+            {
+                return new Version(major, minor);
+            }
+            else if (revision < 0)
+            {
+                return new Version(major, minor, build);
+            }
+            else
+            {
+                return new Version(major, minor, build, revision);
+            }
         }
     }
 }

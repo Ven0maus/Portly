@@ -5,11 +5,13 @@ using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
+using Portly.Core.Utilities;
 using Portly.Core.Utilities.Logging;
 using Portly.Extensions;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Portly.Server
 {
@@ -402,8 +404,12 @@ namespace Portly.Server
             if (packet == null || packet.Identifier.Id != (int)PacketType.LiteHandshake || packet.Payload == null)
                 return (false, null);
 
-            // Protocol check
-            var protocolVersion = packet.As<Version>().Payload;
+            // Protocol + version check
+            var liteHandshake = packet.As<LiteHandshake>().Payload;
+            var protocol = Encoding.UTF8.GetString(liteHandshake.Protocol);
+            if (protocol != _packetProtocol.GetType().Name)
+                return (false, $"Protocol mismatch (Received: {protocol} | Expected: {_packetProtocol.GetType().Name}).");
+            var protocolVersion = VersionUtils.FromBytes(liteHandshake.ProtocolVersion);
             if (protocolVersion != _packetProtocol.Version)
                 return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {_packetProtocol.Version}).");
 
@@ -465,6 +471,7 @@ namespace Portly.Server
             byte[] signedData = request.Payload.Challenge.Combine(
                 request.Payload.ClientEphemeralKey,
                 keyExchange.PublicKey,
+                request.Payload.Protocol,
                 request.Payload.ProtocolVersion
             );
 

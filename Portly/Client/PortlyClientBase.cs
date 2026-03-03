@@ -8,6 +8,7 @@ using Portly.Core.Utilities;
 using Portly.Extensions;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Portly.Client
 {
@@ -230,9 +231,13 @@ namespace Portly.Client
         private async Task PerformLiteHandshakeAsync(NetworkStream stream)
         {
             // Send protocol version
-            await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
+            await SendPacketInternalAsync(stream, Packet.Create(
                 PacketType.LiteHandshake,
-                _packetProtocol.Version,
+                new LiteHandshake
+                {
+                    Protocol = Encoding.UTF8.GetBytes(_packetProtocol.GetType().Name),
+                    ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
+                },
                 false
             ));
 
@@ -266,6 +271,7 @@ namespace Portly.Client
             {
                 Challenge = challenge,
                 ClientEphemeralKey = keyExchange.PublicKey,
+                Protocol = Encoding.UTF8.GetBytes(_packetProtocol.GetType().Name),
                 ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
             };
 
@@ -291,6 +297,7 @@ namespace Portly.Client
             byte[] signedData = challenge.Combine(
                 keyExchange.PublicKey,
                 response.Payload.ServerEphemeralKey,
+                clientHandshake.Protocol,
                 clientHandshake.ProtocolVersion
             );
 
