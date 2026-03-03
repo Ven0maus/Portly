@@ -27,9 +27,7 @@ namespace Portly.Server
         private static readonly HashSet<int> _systemPacketIds = [.. Enum.GetValues<PacketType>().Select(a => (int)a)];
         private readonly PacketRouter<IServerClient> _packetRouter = new();
 
-        private readonly KeepAliveManager<ServerClient> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
-            async (serverClient) => await serverClient.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
-            async (serverClient) => await serverClient.DisconnectInternalAsync());
+        private readonly KeepAliveManager<ServerClient> _keepAliveManager;
 
         private readonly int _port;
 
@@ -77,11 +75,18 @@ namespace Portly.Server
         {
             LogProvider = logProvider;
             Configuration = configuration ?? ServerConfiguration.Load(logProvider: LogProvider);
+            Configuration.Validate();
 
             _port = port;
             _listener = new TcpListener(IPAddress.Any, _port);
             _trustServer = new TrustServer();
             _cts = new();
+
+            _keepAliveManager = new(
+                TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveIntervalSeconds),
+                TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveTimeoutSeconds),
+                async (serverClient) => await serverClient.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
+                async (serverClient) => await serverClient.DisconnectInternalAsync());
         }
 
         /// <summary>
@@ -335,7 +340,7 @@ namespace Portly.Server
                             {
                                 _keepAliveManager.UpdateLastReceived(connection);
                                 await HandlePacketAsync(connection, packet);
-                            }, Configuration.ConnectionSettings.MaxRequestSizeBytes, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
+                            }, Configuration.ConnectionSettings.IdleTimeoutSeconds, Configuration.ConnectionSettings.MaxRequestSizeBytes, connection.Crypto, LogProvider, connection.Id, linkedCts.Token);
                     }
                     catch (OperationCanceledException) { }
                     catch (Exception ex)
@@ -370,7 +375,27 @@ namespace Portly.Server
 
         private async Task<(bool result, string? validReason)> PerformLiteHandshakeAsync(ServerClient connection)
         {
-            var packet = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, logProvider: LogProvider, clientId: connection.Id);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Configuration.ConnectionSettings.ConnectTimeoutSeconds));
+
+            Packet? packet;
+            try
+            {
+                packet = await PacketProtocol.ReceiveSinglePacketAsync(
+                    connection.Stream,
+                    logProvider: LogProvider,
+                    clientId: connection.Id,
+                    token: cts.Token
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Handshake timed out.");
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Handshake error: {ex.Message}");
+            }
+
             if (packet == null || packet.Identifier.Id != (int)PacketType.LiteHandshake || packet.Payload == null)
                 return (false, null);
 
@@ -405,7 +430,24 @@ namespace Portly.Server
             await connection.SendPacketAsync(Packet.Create(PacketType.SecureHandshake, publicKey, false));
 
             // 2. Receive client handshake
-            var requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(connection.Stream, connection.Crypto, connection.LogProvider, connection.Id);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Configuration.ConnectionSettings.ConnectTimeoutSeconds));
+
+            Packet? requestPacket;
+            try
+            {
+                requestPacket = await PacketProtocol.ReceiveSinglePacketAsync(
+                    connection.Stream,
+                    connection.Crypto,
+                    connection.LogProvider,
+                    connection.Id,
+                    cts.Token
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                return false; // timeout
+            }
+
             if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.SecureHandshake || requestPacket.Payload == null)
                 return false;
 

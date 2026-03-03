@@ -29,14 +29,9 @@
         public int ConnectTimeoutSeconds { get; set; } = 10;
 
         /// <summary>
-        /// IdleTimeout
+        /// How long a read receiver can receive no data, can be 0
         /// </summary>
         public int IdleTimeoutSeconds { get; set; } = 120;
-
-        /// <summary>
-        /// ReadTimeout
-        /// </summary>
-        public int ReadTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
         /// WriteTimeout
@@ -44,9 +39,14 @@
         public int WriteTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
-        /// KeepAliveTimeout
+        /// How often keep alive packet is send
         /// </summary>
-        public int KeepAliveTimeoutSeconds { get; set; } = 30;
+        public int KeepAliveIntervalSeconds { get; set; } = 30;
+
+        /// <summary>
+        /// How long no keepalive is received until connection times out
+        /// </summary>
+        public int KeepAliveTimeoutSeconds { get; set; } = 60;
 
         /// <summary>
         /// MaxRequestSizeBytes

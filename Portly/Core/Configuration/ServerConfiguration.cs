@@ -37,5 +37,35 @@ namespace Portly.Core.Configuration
         /// </summary>
         public void Save(ISerializer? serializer = null, ILogProvider? logProvider = null)
             => new ConfigurationService(serializer, logProvider).Save(this);
+
+        /// <summary>
+        /// Executes any validations on set values.
+        /// </summary>
+        /// <exception cref="Exception"></exception>
+        public void Validate()
+        {
+            var errors = new List<string>();
+
+            if (ConnectionSettings.ConnectTimeoutSeconds <= 0)
+                errors.Add($"ConnectTimeoutSeconds is invalid ({ConnectionSettings.ConnectTimeoutSeconds}), must be > 0");
+
+            if (ConnectionSettings.WriteTimeoutSeconds <= 0)
+                errors.Add($"WriteTimeoutSeconds is invalid ({ConnectionSettings.WriteTimeoutSeconds}), must be > 0");
+
+            if (ConnectionSettings.KeepAliveIntervalSeconds <= 0)
+                errors.Add($"KeepAliveIntervalSeconds is invalid ({ConnectionSettings.KeepAliveIntervalSeconds}), must be > 0");
+
+            if (ConnectionSettings.KeepAliveTimeoutSeconds < ConnectionSettings.KeepAliveIntervalSeconds)
+                errors.Add($"KeepAliveTimeoutSeconds is invalid ({ConnectionSettings.KeepAliveTimeoutSeconds}), must be >= KeepAliveIntervalSeconds ({ConnectionSettings.KeepAliveIntervalSeconds})");
+
+            if (ConnectionSettings.IdleTimeoutSeconds <= 0)
+                errors.Add($"IdleTimeoutSeconds is invalid ({ConnectionSettings.IdleTimeoutSeconds}), must be > 0");
+
+            if (ConnectionSettings.IdleTimeoutSeconds < ConnectionSettings.KeepAliveTimeoutSeconds)
+                errors.Add($"IdleTimeoutSeconds ({ConnectionSettings.IdleTimeoutSeconds}) should be >= KeepAliveTimeoutSeconds ({ConnectionSettings.KeepAliveTimeoutSeconds})");
+
+            if (errors.Count > 0)
+                throw new Exception("Configuration validation failed:\n" + string.Join("\n", errors.Select(a => "- " + a)));
+        }
     }
 }

@@ -41,7 +41,7 @@ namespace Portly.Client
         /// </summary>
         public readonly ILogProvider? LogProvider;
 
-        private readonly KeepAliveManager<PortlyClientBase> _keepAliveManager = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15),
+        private readonly KeepAliveManager<PortlyClientBase> _keepAliveManager = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60),
             async (client) => await client.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false)),
             async (client) => await client.DisconnectAsync());
 
@@ -110,7 +110,7 @@ namespace Portly.Client
                     if (task != null)
                         await task;
                     OnPacketReceived?.Invoke(this, packet);
-                }, null, _crypto, LogProvider, null, cts.Token);
+                }, 30, null, _crypto, LogProvider, null, cts.Token);
 
                 // Update initial state
                 _keepAliveManager.Register(this);
@@ -165,7 +165,7 @@ namespace Portly.Client
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(stream, packet, null, _crypto, LogProvider);
+                await PacketProtocol.SendPacketAsync(stream, packet, 30, null, _crypto, LogProvider);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally

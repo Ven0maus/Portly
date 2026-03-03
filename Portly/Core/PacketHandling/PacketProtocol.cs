@@ -26,13 +26,15 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Sends a packet over a NetworkStream.
         /// </summary>
-        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, int? maxPacketSize = null,
+        internal static async Task SendPacketAsync(NetworkStream stream, Packet packet, int writeTimeoutSeconds = 30, int? maxPacketSize = null,
             IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(writeTimeoutSeconds));
+
                 logProvider?.Log(clientId != null ? $"[{clientId}]: KeepAlive check send." : "KeepAlive check send.", LogLevel.Debug);
-                await stream.WriteAsync(_emptyPacketPayload);
+                await stream.WriteAsync(_emptyPacketPayload, cts.Token);
                 return;
             }
 
@@ -63,7 +65,14 @@ namespace Portly.Core.PacketHandling
                 BinaryPrimitives.WriteInt32BigEndian(span.Slice(0, 4), payload.Length);
                 payload.CopyTo(span.Slice(4));
 
-                await stream.WriteAsync(buffer.AsMemory(0, 4 + payload.Length));
+                // Use a cancellation token if a write timeout is specified
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(writeTimeoutSeconds));
+
+                await stream.WriteAsync(buffer.AsMemory(0, 4 + payload.Length), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new IOException("Write operation timed out.");
             }
             finally
             {
@@ -74,17 +83,21 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// Continuously reads packets from a NetworkStream, using ArrayPool buffers to reduce allocations.
         /// </summary>
-        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, int? maxPacketSize = null, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
+        internal static async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket, int idleTimeout = 30, int? maxPacketSize = null, IPacketCrypto? crypto = null, ILogProvider? logProvider = null, Guid? clientId = null, CancellationToken token = default)
         {
             var lengthBuffer = new byte[4];
 
             while (!token.IsCancellationRequested)
             {
+                using var cts = idleTimeout <= 0 ? null : CancellationTokenSource.CreateLinkedTokenSource(token);
+                cts?.CancelAfter(TimeSpan.FromSeconds(idleTimeout));
+                var readToken = cts?.Token ?? token;
+
                 // Read 4-byte length prefix
                 int bytesRead = 0;
                 while (bytesRead < 4)
                 {
-                    int read = await stream.ReadAsync(lengthBuffer.AsMemory(bytesRead, 4 - bytesRead), token);
+                    int read = await stream.ReadAsync(lengthBuffer.AsMemory(bytesRead, 4 - bytesRead), readToken);
                     if (read == 0) throw new IOException("Connection closed");
                     bytesRead += read;
                 }
@@ -112,7 +125,7 @@ namespace Portly.Core.PacketHandling
                         int offset = 0;
                         while (offset < packetLength)
                         {
-                            int read = await stream.ReadAsync(dataBuffer.AsMemory(offset, packetLength - offset), token);
+                            int read = await stream.ReadAsync(dataBuffer.AsMemory(offset, packetLength - offset), readToken);
                             if (read == 0) throw new IOException("Connection closed");
                             offset += read;
                         }

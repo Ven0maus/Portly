@@ -45,7 +45,7 @@ namespace Portly.Server
             await _sendLock.WaitAsync();
             try
             {
-                await PacketProtocol.SendPacketAsync(Stream, packet, configuration.ConnectionSettings.MaxRequestSizeBytes, Crypto, LogProvider, Id);
+                await PacketProtocol.SendPacketAsync(Stream, packet, configuration.ConnectionSettings.WriteTimeoutSeconds, configuration.ConnectionSettings.MaxRequestSizeBytes, Crypto, LogProvider, Id);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
