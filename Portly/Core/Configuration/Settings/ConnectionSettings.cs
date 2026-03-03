@@ -19,27 +19,27 @@
         /// <summary>
         /// ConnectTimeout
         /// </summary>
-        public TimeSpan? ConnectTimeout { get; set; } = TimeSpan.FromSeconds(10);
+        public int ConnectTimeoutSeconds { get; set; } = 10;
 
         /// <summary>
         /// IdleTimeout
         /// </summary>
-        public TimeSpan? IdleTimeout { get; set; } = TimeSpan.FromMinutes(2);
+        public int IdleTimeoutSeconds { get; set; } = 120;
 
         /// <summary>
         /// ReadTimeout
         /// </summary>
-        public TimeSpan? ReadTimeout { get; set; } = TimeSpan.FromSeconds(30);
+        public int ReadTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
         /// WriteTimeout
         /// </summary>
-        public TimeSpan? WriteTimeout { get; set; } = TimeSpan.FromSeconds(30);
+        public int WriteTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
         /// KeepAliveTimeout
         /// </summary>
-        public TimeSpan? KeepAliveTimeout { get; set; } = TimeSpan.FromSeconds(30);
+        public int KeepAliveTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
         /// MaxRequestSizeBytes
