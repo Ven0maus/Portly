@@ -305,7 +305,7 @@ namespace Portly.Client
                 throw new Exception("Invalid server signature. Possible MITM attack.");
 
             // 6. Derive session key
-            _encryptionProvider = new AesPacketCrypto(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
+            _encryptionProvider = new AESEncryptionProvider(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey));
         }
     }
 }
