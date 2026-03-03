@@ -492,7 +492,7 @@ namespace Portly.Server
             ));
 
             // 7. Derive session key
-            connection.EncryptionProvider = new AesPacketCrypto(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey));
+            connection.EncryptionProvider = new AESEncryptionProvider(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey));
 
             return true;
         }
