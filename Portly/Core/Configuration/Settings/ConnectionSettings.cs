@@ -6,54 +6,52 @@
     public class ConnectionSettings
     {
         /// <summary>
-        /// MaxConnections
+        /// Maximum simultaneous connections allowed
         /// </summary>
-        public int MaxConnections { get; set; } = 20;
+        public int MaxConnections { get; set; } = 500;
 
         /// <summary>
-        /// MaxConnectionsPerIp
+        /// Maximum simultaneous connections per single IP
         /// </summary>
-        public int MaxConnectionsPerIp { get; set; } = 1;
+        public int MaxConnectionsPerIp { get; set; } = 5;
 
         /// <summary>
-        /// Maximum number of incoming connections that can be queued in the pre-handshake (pending) state
-        /// before new connections are rejected. This helps absorb short connection spikes while protecting
-        /// the server from overload.
+        /// Maximum number of incoming connections queued while waiting for handshake
         /// </summary>
-        public int MaxPendingConnectionBacklog { get; set; } = 100;
+        public int MaxPendingConnectionBacklog { get; set; } = 200;
 
         /// <summary>
-        /// ConnectTimeout
+        /// Maximum time allowed for TCP connect before failing
         /// </summary>
         public int ConnectTimeoutSeconds { get; set; } = 10;
 
         /// <summary>
-        /// How long a read receiver can receive no data, can be 0
+        /// Maximum idle time without receiving any packets (including KeepAlive)
         /// </summary>
-        public int IdleTimeoutSeconds { get; set; } = 120;
+        public int IdleTimeoutSeconds { get; set; } = 180;
 
         /// <summary>
-        /// WriteTimeout
+        /// Maximum time allowed for sending a packet
         /// </summary>
         public int WriteTimeoutSeconds { get; set; } = 30;
 
         /// <summary>
-        /// How often keep alive packet is send
+        /// Interval at which KeepAlive packets are sent if no other traffic occurs
         /// </summary>
         public int KeepAliveIntervalSeconds { get; set; } = 30;
 
         /// <summary>
-        /// How long no keepalive is received until connection times out
+        /// Time without receiving KeepAlive or any packet before disconnecting
         /// </summary>
-        public int KeepAliveTimeoutSeconds { get; set; } = 60;
+        public int KeepAliveTimeoutSeconds { get; set; } = 90;
 
         /// <summary>
-        /// MaxRequestSizeBytes
+        /// Maximum allowed size of a single request/packet
         /// </summary>
-        public int MaxRequestSizeBytes { get; set; } = 64 * 1024; // 64 kb
+        public int MaxRequestSizeBytes { get; set; } = 64 * 1024; // 64 KB
 
         /// <summary>
-        /// No TCP Delay
+        /// TCP_NODELAY to reduce latency at the cost of more packets
         /// </summary>
         public bool NoTcpDelay { get; set; } = true;
     }
