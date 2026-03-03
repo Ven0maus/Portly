@@ -5,7 +5,6 @@
     /// </summary>
     public class ConnectionSettings
     {
-        // TODO: Implement these
         /// <summary>
         /// MaxConnections
         /// </summary>
