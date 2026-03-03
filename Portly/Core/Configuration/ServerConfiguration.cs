@@ -46,6 +46,15 @@ namespace Portly.Core.Configuration
         {
             var errors = new List<string>();
 
+            if (ConnectionSettings.MaxConnections <= 0)
+                errors.Add($"MaxConnections is invalid ({ConnectionSettings.MaxConnections}), must be > 0");
+
+            if (ConnectionSettings.MaxConnectionsPerIp <= 0)
+                errors.Add($"MaxConnectionsPerIp is invalid ({ConnectionSettings.MaxConnectionsPerIp}), must be > 0");
+
+            if (ConnectionSettings.MaxPendingConnectionBacklog <= 0)
+                errors.Add($"MaxPendingConnectionBacklog is invalid ({ConnectionSettings.MaxPendingConnectionBacklog}), must be > 0");
+
             if (ConnectionSettings.ConnectTimeoutSeconds <= 0)
                 errors.Add($"ConnectTimeoutSeconds is invalid ({ConnectionSettings.ConnectTimeoutSeconds}), must be > 0");
 
