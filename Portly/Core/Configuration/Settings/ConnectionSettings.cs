@@ -6,6 +6,16 @@
     public class ConnectionSettings
     {
         /// <summary>
+        /// The IpAddress used to connect to the server, leave empty to use any.
+        /// </summary>
+        public string IpAddress { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The port used to connect to the server.
+        /// </summary>
+        public int Port { get; set; } = 5000;
+
+        /// <summary>
         /// Maximum simultaneous connections allowed
         /// </summary>
         public int MaxConnections { get; set; } = 500;

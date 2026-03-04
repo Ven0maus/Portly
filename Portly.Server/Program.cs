@@ -4,7 +4,7 @@ namespace Portly.Server
 {
     internal class Program
     {
-        private static readonly PortlyServer _server = new(25565, new CompositeLogger(
+        private static readonly PortlyServer _server = new(new CompositeLogger(
             new ConsoleLogger(true),
             new FileSystemLogger(enableDebug: true)));
 

@@ -1,4 +1,5 @@
-﻿using Portly.Core.Utilities.Logging;
+﻿using Portly.Core.Configuration.Settings;
+using Portly.Core.Utilities.Logging;
 
 namespace Portly.Client
 {
@@ -11,7 +12,7 @@ namespace Portly.Client
         private static async Task Main()
         {
             _client.OnConnected += OnConnected;
-            await _client.ConnectAsync("localhost", 25565);
+            await _client.ConnectAsync("localhost", new ConnectionSettings().Port);
 
             var input = Console.ReadLine();
             while (string.IsNullOrWhiteSpace(input) || !input.Equals("shutdown", StringComparison.OrdinalIgnoreCase))

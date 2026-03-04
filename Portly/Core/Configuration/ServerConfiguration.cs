@@ -47,6 +47,9 @@ namespace Portly.Core.Configuration
         {
             var errors = new List<string>();
 
+            if (ConnectionSettings.Port == 0)
+                errors.Add($"Server Port is invalid ({ConnectionSettings.Port}), must be > 0");
+
             if (ConnectionSettings.MaxConnections <= 0)
                 errors.Add($"MaxConnections is invalid ({ConnectionSettings.MaxConnections}), must be > 0");
 

@@ -32,7 +32,6 @@ namespace Portly.Server
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
 
-        private readonly int _port;
         private readonly IPacketProtocol _packetProtocol;
 
         /// <summary>
@@ -72,19 +71,24 @@ namespace Portly.Server
         /// <summary>
         /// Constructor
         /// </summary>
-        /// <param name="port"></param>
-        /// <param name="configuration"></param>
         /// <param name="packetProtocol"></param>
         /// <param name="logProvider"></param>
-        internal PortlyServerBase(int port, ServerConfiguration? configuration = null, IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null)
+        internal PortlyServerBase(IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null)
         {
             LogProvider = logProvider;
-            Configuration = configuration ?? ServerConfiguration.Load(logProvider: LogProvider);
+            Configuration = ServerConfiguration.Load(logProvider: LogProvider);
             Configuration.Validate();
 
-            _port = port;
             _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(Configuration.ConnectionSettings, logProvider);
-            _listener = new TcpListener(IPAddress.Any, _port);
+
+            var ipToUse = IPAddress.Any;
+            if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
+                IPAddress.TryParse(Configuration.ConnectionSettings.IpAddress, out var ipAddress))
+            {
+                ipToUse = ipAddress;
+            }
+
+            _listener = new TcpListener(ipToUse, Configuration.ConnectionSettings.Port);
             _trustServer = new TrustServer();
             _cts = new();
 
@@ -102,7 +106,7 @@ namespace Portly.Server
         public async Task StartAsync()
         {
             _listener.Start(Configuration.ConnectionSettings.MaxPendingConnectionBacklog);
-            LogProvider?.Log($"Server started on port {_port}.");
+            LogProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
 
             _ = Task.Run(async () =>
             {
