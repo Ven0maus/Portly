@@ -443,7 +443,7 @@ namespace Portly.Server
             var clientIp = remoteEndPoint.Address;
 
             // Verify IP against whitelist/banlist
-            var (ipAllowed, ipReason) = ValidateIpAddress(clientIp);
+            var (ipAllowed, ipReason) = ValidateIpAddress(clientIp.MapToIPv6());
             if (!ipAllowed)
                 return (false, ipReason);
 

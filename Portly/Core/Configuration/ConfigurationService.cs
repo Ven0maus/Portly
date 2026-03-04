@@ -48,7 +48,7 @@ namespace Portly.Core.Configuration
             if (!File.Exists(fileName))
             {
                 File.WriteAllText(fileName, string.Empty);
-                return new HashSet<IPAddress>();
+                return [];
             }
 
             var set = new HashSet<IPAddress>();
@@ -63,7 +63,7 @@ namespace Portly.Core.Configuration
 
                 if (IPAddress.TryParse(trimmed, out var ip))
                 {
-                    set.Add(ip);
+                    set.Add(ip.MapToIPv6());
                 }
                 else
                 {
@@ -76,7 +76,8 @@ namespace Portly.Core.Configuration
 
         private static void SaveList(string fileName, IEnumerable<IPAddress> values)
         {
-            File.WriteAllLines(fileName, values.Select(ip => ip.ToString()));
+            // Undo normalization back to IPv4
+            File.WriteAllLines(fileName, values.Select(ip => ip.MapToIPv4().ToString()));
         }
 
         private T LoadOrCreate<T>(string filePathWithoutExtension) where T : new()
