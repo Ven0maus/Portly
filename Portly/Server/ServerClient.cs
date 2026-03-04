@@ -21,7 +21,7 @@ namespace Portly.Server
         public TcpClient TcpClient { get; } = client;
         public NetworkStream Stream { get; } = client.GetStream();
         public IPAddress IpAddress { get; } = (client.Client.RemoteEndPoint as IPEndPoint
-                 ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address;
+                 ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address.MapToIPv6();
         public CancellationTokenSource Cancellation { get; } = new();
         public ClientRateLimiter ClientRateLimiter { get; } = new(configuration.RateLimits);
         public Task? ClientTask { get; set; }

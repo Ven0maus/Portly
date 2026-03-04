@@ -440,17 +440,17 @@ namespace Portly.Server
             if (remoteEndPoint == null)
                 return (false, "Unable to determine client IP.");
 
-            var clientIp = remoteEndPoint.Address;
+            var clientIp = remoteEndPoint.Address.MapToIPv6();
 
             // Verify IP against whitelist/banlist
-            var (ipAllowed, ipReason) = ValidateIpAddress(clientIp.MapToIPv6());
+            var (ipAllowed, ipReason) = ValidateIpAddress(clientIp);
             if (!ipAllowed)
                 return (false, ipReason);
 
             // Verify max connections per ip
             _connectionsPerIp.TryGetValue(clientIp, out int connectionsFromIp);
             if (connectionsFromIp >= Configuration.ConnectionSettings.MaxConnectionsPerIp)
-                return (false, $"Too many connections from {clientIp}");
+                return (false, $"Too many connections from {clientIp.MapToIPv4()}");
 
             return (true, null);
         }
