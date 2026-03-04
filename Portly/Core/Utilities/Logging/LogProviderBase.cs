@@ -69,5 +69,11 @@ namespace Portly.Core.Utilities.Logging
             LogLevels.Remove(logLevel);
             return this;
         }
+
+        /// <summary>
+        /// Provides a default composite logger that logs to the console and to the disk.
+        /// </summary>
+        public static ILogProvider? Default => new CompositeLogger(
+            new ConsoleLogger(), new FileSystemLogger());
     }
 }
