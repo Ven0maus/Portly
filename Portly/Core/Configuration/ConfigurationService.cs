@@ -1,6 +1,7 @@
 ﻿using Portly.Core.Configuration.Serializers;
 using Portly.Core.Interfaces;
 using Portly.Core.Utilities.Logging;
+using System.Net;
 
 namespace Portly.Core.Configuration
 {
@@ -42,22 +43,40 @@ namespace Portly.Core.Configuration
             _logProvider?.Log("Saved configuration files.", LogLevel.Debug);
         }
 
-        private static HashSet<string> LoadList(string fileName)
+        private HashSet<IPAddress> LoadList(string fileName)
         {
             if (!File.Exists(fileName))
             {
                 File.WriteAllText(fileName, string.Empty);
-                return [];
+                return new HashSet<IPAddress>();
             }
 
-            return File.ReadAllLines(fileName)
-                       .Where(x => !string.IsNullOrWhiteSpace(x))
-                       .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var set = new HashSet<IPAddress>();
+
+            foreach (var line in File.ReadLines(fileName))
+            {
+                var trimmed = line.Trim();
+
+                // Skip empty lines and comments
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                    continue;
+
+                if (IPAddress.TryParse(trimmed, out var ip))
+                {
+                    set.Add(ip);
+                }
+                else
+                {
+                    _logProvider?.Log($"Invalid IP in {fileName}: {trimmed}", LogLevel.Warning);
+                }
+            }
+
+            return set;
         }
 
-        private static void SaveList(string fileName, IEnumerable<string> values)
+        private static void SaveList(string fileName, IEnumerable<IPAddress> values)
         {
-            File.WriteAllLines(fileName, values);
+            File.WriteAllLines(fileName, values.Select(ip => ip.ToString()));
         }
 
         private T LoadOrCreate<T>(string filePathWithoutExtension) where T : new()

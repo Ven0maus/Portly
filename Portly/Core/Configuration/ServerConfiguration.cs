@@ -1,6 +1,7 @@
 ﻿using Portly.Core.Configuration.Serializers;
 using Portly.Core.Configuration.Settings;
 using Portly.Core.Interfaces;
+using System.Net;
 
 namespace Portly.Core.Configuration
 {
@@ -20,11 +21,11 @@ namespace Portly.Core.Configuration
         /// <summary>
         /// List of ips to be blocked on connection.
         /// </summary>
-        public HashSet<string> IpBlacklist { get; set; } = new();
+        public HashSet<IPAddress> IpBlacklist { get; set; } = new();
         /// <summary>
         /// Lists of ips to be exclusively allowed in the server, any others are denied on connection.
         /// </summary>
-        public HashSet<string> IpWhitelist { get; set; } = new();
+        public HashSet<IPAddress> IpWhitelist { get; set; } = new();
 
         /// <summary>
         /// Loads all configuration from disk.

@@ -1,11 +1,11 @@
 ﻿using Portly.Core.Authentication.Encryption;
 using Portly.Core.Authentication.Handshake;
+using Portly.Core.Extensions;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Utilities;
-using Portly.Extensions;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;

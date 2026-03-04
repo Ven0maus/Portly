@@ -1,4 +1,4 @@
-﻿namespace Portly.Extensions
+﻿namespace Portly.Core.Extensions
 {
     internal static class ByteExtensions
     {

@@ -1,13 +1,13 @@
 ﻿using Portly.Core.Authentication.Encryption;
 using Portly.Core.Authentication.Handshake;
 using Portly.Core.Configuration;
+using Portly.Core.Extensions;
 using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Utilities;
 using Portly.Core.Utilities.Logging;
-using Portly.Extensions;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -379,6 +379,24 @@ namespace Portly.Server
             }
         }
 
+        private (bool allowed, string? reason) ValidateIpAddress(IPAddress ip)
+        {
+            // If whitelist has entries → ONLY allow those
+            if (Configuration.IpWhitelist.Count > 0)
+            {
+                if (!Configuration.IpWhitelist.Contains(ip))
+                    return (false, $"IP {ip} is not whitelisted.");
+
+                return (true, null);
+            }
+
+            // Otherwise use banlist (allow all except banned)
+            if (Configuration.IpBlacklist.Contains(ip))
+                return (false, $"IP {ip} is banned.");
+
+            return (true, null);
+        }
+
         private async Task<(bool result, string? validReason)> PerformLiteHandshakeAsync(ServerClient connection)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Configuration.ConnectionSettings.ConnectTimeoutSeconds));
@@ -422,8 +440,14 @@ namespace Portly.Server
             if (remoteEndPoint == null)
                 return (false, "Unable to determine client IP.");
 
-            // Verify max connections per ip
             var clientIp = remoteEndPoint.Address;
+
+            // Verify IP against whitelist/banlist
+            var (ipAllowed, ipReason) = ValidateIpAddress(clientIp);
+            if (!ipAllowed)
+                return (false, ipReason);
+
+            // Verify max connections per ip
             _connectionsPerIp.TryGetValue(clientIp, out int connectionsFromIp);
             if (connectionsFromIp >= Configuration.ConnectionSettings.MaxConnectionsPerIp)
                 return (false, $"Too many connections from {clientIp}");
