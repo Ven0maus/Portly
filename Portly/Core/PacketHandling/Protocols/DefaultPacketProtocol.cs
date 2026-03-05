@@ -1,6 +1,7 @@
 ﻿using MessagePack;
 using Portly.Core.Configuration.Settings;
 using Portly.Core.Interfaces;
+using Portly.Core.Networking;
 using Portly.Core.Utilities.Logging;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -212,6 +213,14 @@ namespace Portly.Core.PacketHandling.Protocols
             catch (Exception ex)
             {
                 throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
+            }
+
+            // Nonce, timestamp setup
+            if (packet.Nonce == null || packet.TimestampUtc == null)
+            {
+                var (nonce, timestampUtc) = ReplayProtection.CreateNonceWithTimestamp();
+                packet.Nonce = nonce;
+                packet.TimestampUtc = timestampUtc;
             }
 
             byte[] payload = packet.SerializedPacket ??= MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);

@@ -295,6 +295,7 @@ namespace Portly.Client
             ecdsa.ImportSubjectPublicKeyInfo(publicKey, out _);
 
             byte[] signedData = challenge.Combine(
+                publicKey,
                 keyExchange.PublicKey,
                 response.Payload.ServerEphemeralKey,
                 clientHandshake.Protocol,

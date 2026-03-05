@@ -47,6 +47,9 @@ namespace Portly.Core.Configuration
         {
             var errors = new List<string>();
 
+            if (RateLimits.RequestsValidForMaxMinutes <= 0)
+                errors.Add($"RequestsValidForMaxMinutes is invalid ({RateLimits.RequestsValidForMaxMinutes}), must be > 0");
+
             if (ConnectionSettings.Port == 0)
                 errors.Add($"Server Port is invalid ({ConnectionSettings.Port}), must be > 0");
 

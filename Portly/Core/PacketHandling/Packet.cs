@@ -25,7 +25,7 @@ namespace Portly.Core.PacketHandling
         public byte[] Payload
         {
             get => _payloadBackingField;
-            init => _payloadBackingField = value; // public can only init
+            init => _payloadBackingField = value;
         }
 
         /// <summary>
@@ -33,6 +33,18 @@ namespace Portly.Core.PacketHandling
         /// </summary>
         [Key(2)]
         public bool Encrypted { get; init; }
+
+        /// <summary>
+        /// The nonce of the packet.
+        /// </summary>
+        [Key(3)]
+        public string? Nonce { get; set; }
+
+        /// <summary>
+        /// The timestamp the packet was created in UTC.
+        /// </summary>
+        [Key(4)]
+        public DateTime? TimestampUtc { get; set; }
 
         /// <summary>
         /// Stores the serialized byte array from the entire packet, for caching purposes when sending to multiple clients.
@@ -57,7 +69,9 @@ namespace Portly.Core.PacketHandling
         {
             var packet = new Packet<T>(Identifier, Payload, Encrypted)
             {
-                SerializedPacket = SerializedPacket
+                SerializedPacket = SerializedPacket,
+                Nonce = Nonce,
+                TimestampUtc = TimestampUtc
             };
             return packet;
         }

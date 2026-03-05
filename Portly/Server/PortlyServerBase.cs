@@ -31,7 +31,7 @@ namespace Portly.Server
         private readonly PacketRouter<IServerClient> _packetRouter = new();
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
-
+        private readonly ReplayProtection _replayProtection;
         private readonly IPacketProtocol _packetProtocol;
 
         /// <summary>
@@ -92,6 +92,7 @@ namespace Portly.Server
             _trustServer = new TrustServer();
             _cts = new();
 
+            _replayProtection = new(TimeSpan.FromMinutes(Configuration.RateLimits.RequestsValidForMaxMinutes));
             _keepAliveManager = new(
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveIntervalSeconds),
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveTimeoutSeconds),
@@ -427,11 +428,16 @@ namespace Portly.Server
                 return (false, null);
 
             // Protocol + version check
-            var liteHandshake = packet.As<LiteHandshake>().Payload;
-            var protocol = Encoding.UTF8.GetString(liteHandshake.Protocol);
+            var liteHandshake = packet.As<LiteHandshake>();
+            var liteHandshakePayload = liteHandshake.Payload;
+
+            if (!_replayProtection.ValidateRequest(liteHandshake.Nonce, liteHandshake.TimestampUtc))
+                return (false, "Invalid or replayed handshake (nonce/timestamp).");
+
+            var protocol = Encoding.UTF8.GetString(liteHandshakePayload.Protocol);
             if (protocol != _packetProtocol.GetType().Name)
                 return (false, $"Protocol mismatch (Received: {protocol} | Expected: {_packetProtocol.GetType().Name}).");
-            var protocolVersion = VersionUtils.FromBytes(liteHandshake.ProtocolVersion);
+            var protocolVersion = VersionUtils.FromBytes(liteHandshakePayload.ProtocolVersion);
             if (protocolVersion != _packetProtocol.Version)
                 return (false, $"Protocol version mismatch (Received: {protocolVersion} | Expected: {_packetProtocol.Version}).");
 
@@ -497,6 +503,7 @@ namespace Portly.Server
 
             // 4. Build signed data
             byte[] signedData = request.Payload.Challenge.Combine(
+                publicKey,
                 request.Payload.ClientEphemeralKey,
                 keyExchange.PublicKey,
                 request.Payload.Protocol,
@@ -527,6 +534,13 @@ namespace Portly.Server
 
         private async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
+            if (!_replayProtection.ValidateRequest(packet.Nonce, packet.TimestampUtc))
+            {
+                // TODO: Determine if this client is too suspicious (many replays attempted, and disconnect it)
+                LogProvider?.Log($"[{connection.Id}]: invalid nonce/timestamp, potential replay attack.", LogLevel.Warning);
+                return;
+            }
+
             // Rate limit non-system packets
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
             {
