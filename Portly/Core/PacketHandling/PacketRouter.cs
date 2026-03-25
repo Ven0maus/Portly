@@ -1,4 +1,5 @@
-﻿using Portly.PacketHandling;
+﻿using Portly.Core.Interfaces;
+using Portly.PacketHandling;
 using System.Collections.Concurrent;
 
 namespace Portly.Core.PacketHandling
@@ -8,17 +9,8 @@ namespace Portly.Core.PacketHandling
     /// </summary>
     public sealed class PacketRouter<T>
     {
-        private readonly ConcurrentDictionary<int, Func<T, Packet, Task>?> _handlers =
+        private readonly ConcurrentDictionary<int, Func<T, IPacket, Task>?> _handlers =
             new();
-
-        /// <summary>
-        /// The handler for the packet.
-        /// </summary>
-        /// <typeparam name="TPayload"></typeparam>
-        /// <param name="client"></param>
-        /// <param name="packet"></param>
-        /// <returns></returns>
-        public delegate Task PacketHandler<TPayload>(T client, Packet<TPayload> packet);
 
         /// <summary>
         /// The base handler for the packet.
@@ -26,25 +18,7 @@ namespace Portly.Core.PacketHandling
         /// <param name="client"></param>
         /// <param name="packet"></param>
         /// <returns></returns>
-        public delegate Task PacketHandlerBase(T client, Packet packet);
-
-        /// <summary>
-        /// Register a typed handler for a packet type, identifiers with a null handler are ignored.
-        /// </summary>
-        public void Register<TPayload>(PacketIdentifier identifier, PacketHandler<TPayload>? handler)
-        {
-            if (handler == null)
-            {
-                _handlers[identifier.Id] = null;
-                return;
-            }
-
-            _handlers[identifier.Id] = async (client, packet) =>
-            {
-                var typedPacket = packet.As<TPayload>();
-                await handler(client, typedPacket);
-            };
-        }
+        public delegate Task PacketHandlerBase(T client, IPacket packet);
 
         /// <summary>
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
@@ -66,15 +40,6 @@ namespace Portly.Core.PacketHandling
         }
 
         /// <summary>
-        /// Register a typed handler for a packet type, identifiers with a null handler are ignored.
-        /// </summary>
-        /// <typeparam name="TPayload"></typeparam>
-        /// <param name="identifier"></param>
-        /// <param name="handler"></param>
-        public void Register<TPayload>(Enum identifier, PacketHandler<TPayload>? handler)
-            => Register((PacketIdentifier)identifier, handler);
-
-        /// <summary>
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
         /// </summary>
         /// <param name="identifier"></param>
@@ -82,7 +47,7 @@ namespace Portly.Core.PacketHandling
         public void Register(Enum identifier, PacketHandlerBase? handler)
             => Register((PacketIdentifier)identifier, handler);
 
-        internal Task? RouteAsync(T client, Packet packet)
+        internal Task? RouteAsync(T client, IPacket packet)
         {
             if (_handlers.TryGetValue(packet.Identifier.Id, out var handler))
                 return handler == null ? null : handler(client, packet);

@@ -27,7 +27,7 @@ namespace Portly.Server
         public Task? ClientTask { get; set; }
 
         public Guid Id { get; } = Guid.NewGuid();
-        internal IEncryptionProvider? EncryptionProvider { get; set; }
+        internal IPacketProtocol PacketProtocol { get; } = packetProtocol;
 
         private int _disconnected = 0;
         private readonly IPacketProtocol _packetProtocol = packetProtocol;
@@ -36,7 +36,7 @@ namespace Portly.Server
 
         private readonly EventHandler<IServerClient>? _onDisconnect = onDisconnect;
 
-        public async Task SendPacketAsync(Packet packet, CancellationToken cancellationToken = default)
+        public async Task SendPacketAsync(IPacket packet, bool encrypt, CancellationToken cancellationToken = default)
         {
             if (!TcpClient.Connected)
                 throw new InvalidOperationException("Client not connected.");
@@ -44,7 +44,7 @@ namespace Portly.Server
             await _sendLock.WaitAsync();
             try
             {
-                await _packetProtocol.SendPacketAsync(Stream, packet, cancellationToken, EncryptionProvider);
+                await _packetProtocol.SendPacketAsync(Stream, packet, encrypt, cancellationToken);
                 _keepAliveManager.UpdateLastSent(this);
             }
             finally
@@ -59,7 +59,7 @@ namespace Portly.Server
                 return;
 
             // Send disconnection packet before cancel
-            await SendPacketAsync(Packet.Create(PacketType.Disconnect, reason, false), default);
+            await SendPacketAsync(Packet.Create(PacketType.Disconnect, reason), default);
             await DisconnectInternalAsync();
         }
 

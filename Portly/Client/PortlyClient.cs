@@ -27,11 +27,11 @@ namespace Portly.Client
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
         }
 
-        private async Task HandleDisconnectPacket(IClient client, Packet packet)
+        private async Task HandleDisconnectPacket(IClient client, IPacket packet)
         {
             string reason = string.Empty;
             if (packet.Payload.Length != 0)
-                reason = packet.As<string>().Payload;
+                reason = ((Packet<string>)packet).Payload;
 
             await ((PortlyClient)client).DisconnectInternalAsync(false, reason);
         }

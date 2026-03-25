@@ -28,7 +28,7 @@ namespace Portly.Server
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
         }
 
-        private async Task HandleDisconnectPacket(IServerClient client, Packet packet)
+        private async Task HandleDisconnectPacket(IServerClient client, IPacket packet)
         {
             await ((ServerClient)client).DisconnectInternalAsync();
         }

@@ -1,5 +1,4 @@
-﻿using Portly.Core.PacketHandling;
-using System.Net;
+﻿using System.Net;
 
 namespace Portly.Core.Interfaces
 {
@@ -22,9 +21,10 @@ namespace Portly.Core.Interfaces
         /// Sends a packet asynchronously to the client.
         /// </summary>
         /// <param name="packet"></param>
+        /// <param name="encrypt"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task SendPacketAsync(Packet packet, CancellationToken cancellationToken);
+        Task SendPacketAsync(IPacket packet, bool encrypt, CancellationToken cancellationToken);
 
         /// <summary>
         /// Disconnects the client from the server, and informing them with a disconnect packet.

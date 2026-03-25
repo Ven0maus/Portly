@@ -1,4 +1,5 @@
 ﻿using MessagePack;
+using Portly.Core.Interfaces;
 using Portly.PacketHandling;
 
 namespace Portly.Core.PacketHandling
@@ -7,7 +8,7 @@ namespace Portly.Core.PacketHandling
     /// Base packet implementation
     /// </summary>
     [MessagePackObject(AllowPrivate = true)]
-    public class Packet
+    public class Packet : IPacket
     {
         /// <summary>
         /// The unique identifier for this packet.
@@ -15,24 +16,26 @@ namespace Portly.Core.PacketHandling
         [Key(0)]
         public PacketIdentifier Identifier { get; init; }
 
-        [IgnoreMember]
-        internal byte[] _payloadBackingField = [];
-
         /// <summary>
         /// The payload of this packet in bytes.
         /// </summary>
         [Key(1)]
-        public byte[] Payload
-        {
-            get => _payloadBackingField;
-            init => _payloadBackingField = value;
-        }
+        public byte[] Payload { get; set; }
 
+        [IgnoreMember]
+        private bool _encrypted;
         /// <summary>
         /// Determines if the packet is encrypted or not.
         /// </summary>
         [Key(2)]
-        public bool Encrypted { get; init; }
+        public bool Encrypted
+        {
+            get => _encrypted;
+            init
+            {
+                _encrypted = value;
+            }
+        }
 
         /// <summary>
         /// The nonce of the packet.
@@ -44,20 +47,16 @@ namespace Portly.Core.PacketHandling
         /// The timestamp the packet was created in UTC.
         /// </summary>
         [Key(4)]
-        public DateTime? TimestampUtc { get; set; }
-
-        /// <summary>
-        /// Stores the serialized byte array from the entire packet, for caching purposes when sending to multiple clients.
-        /// </summary>
-        [IgnoreMember]
-        internal byte[]? SerializedPacket { get; set; }
+        public DateTime? CreationTimestampUtc { get; set; }
 
         [SerializationConstructor]
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted, string? nonce = null, DateTime? creationTimestampUtc = null)
         {
             Identifier = identifier;
             Payload = payload;
             Encrypted = encrypted;
+            Nonce = nonce;
+            CreationTimestampUtc = creationTimestampUtc;
         }
 
         /// <summary>
@@ -65,16 +64,7 @@ namespace Portly.Core.PacketHandling
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public Packet<T> As<T>()
-        {
-            var packet = new Packet<T>(Identifier, Payload, Encrypted)
-            {
-                SerializedPacket = SerializedPacket,
-                Nonce = Nonce,
-                TimestampUtc = TimestampUtc
-            };
-            return packet;
-        }
+        public Packet<T> As<T>() => new(Identifier, Payload, Encrypted, Nonce, CreationTimestampUtc);
 
         /// <summary>
         /// Creates a packet of the specified type, any MessagePack supported object can be used.
@@ -82,11 +72,10 @@ namespace Portly.Core.PacketHandling
         /// <typeparam name="T"></typeparam>
         /// <param name="identifier"></param>
         /// <param name="payload"></param>
-        /// <param name="encrypted"></param>
         /// <returns></returns>
-        public static Packet<T> Create<T>(PacketIdentifier identifier, T payload, bool encrypted)
+        public static Packet<T> Create<T>(PacketIdentifier identifier, T payload)
         {
-            return Packet<T>.Create(identifier, payload, encrypted);
+            return Packet<T>.Create(identifier, payload);
         }
 
         /// <summary>
@@ -96,10 +85,25 @@ namespace Portly.Core.PacketHandling
         /// <typeparam name="TEnum"></typeparam>
         /// <param name="identifier"></param>
         /// <param name="payload"></param>
-        /// <param name="encrypted"></param>
         /// <returns></returns>
-        public static Packet<T> Create<T, TEnum>(TEnum identifier, T payload, bool encrypted) where TEnum : Enum
-            => Create((PacketIdentifier)identifier, payload, encrypted);
+        public static Packet<T> Create<T, TEnum>(TEnum identifier, T payload) where TEnum : Enum
+            => Create((PacketIdentifier)identifier, payload);
+
+        /// <inheritdoc/>
+        public void Encrypt(IEncryptionProvider? encryptionProvider)
+        {
+            if (Encrypted || encryptionProvider == null) return;
+            Payload = encryptionProvider.Encrypt(Payload);
+            _encrypted = true;
+        }
+
+        /// <inheritdoc/>
+        public void Decrypt(IEncryptionProvider? encryptionProvider)
+        {
+            if (!Encrypted || encryptionProvider == null) return;
+            Payload = encryptionProvider.Decrypt(Payload);
+            _encrypted = false;
+        }
     }
 
     /// <summary>
@@ -112,10 +116,11 @@ namespace Portly.Core.PacketHandling
         /// <summary>
         /// The payload of the packet as a generic typed object.
         /// </summary>
+        [IgnoreMember]
         public new T Payload => _payloadObj ??= MessagePackSerializer.Deserialize<T>(base.Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
-            : base(identifier, payload, encrypted)
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted, string? nonce, DateTime? creationTimestampUtc)
+            : base(identifier, payload, encrypted, nonce, creationTimestampUtc)
         { }
 
         /// <summary>
@@ -123,10 +128,9 @@ namespace Portly.Core.PacketHandling
         /// </summary>
         /// <param name="identifier"></param>
         /// <param name="payload"></param>
-        /// <param name="encrypted"></param>
         /// <returns></returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public static Packet<T> Create(PacketIdentifier identifier, T payload, bool encrypted)
+        public static Packet<T> Create(PacketIdentifier identifier, T payload)
         {
             try
             {
@@ -134,7 +138,7 @@ namespace Portly.Core.PacketHandling
                     MessagePackSerializer.Serialize(payload,
                         MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-                return new Packet<T>(identifier, serializedPayload, encrypted)
+                return new Packet<T>(identifier, serializedPayload, false, null, null)
                 {
                     _payloadObj = payload,
                 };
@@ -151,9 +155,8 @@ namespace Portly.Core.PacketHandling
         /// <typeparam name="TEnum"></typeparam>
         /// <param name="identifier"></param>
         /// <param name="payload"></param>
-        /// <param name="encrypted"></param>
         /// <returns></returns>
-        public static Packet<T> Create<TEnum>(TEnum identifier, T payload, bool encrypted) where TEnum : Enum
-            => Create((PacketIdentifier)identifier, payload, encrypted);
+        public static Packet<T> Create<TEnum>(TEnum identifier, T payload) where TEnum : Enum
+            => Create((PacketIdentifier)identifier, payload);
     }
 }

@@ -19,13 +19,15 @@ namespace Portly.Core.PacketHandling.Protocols
         public Version Version => _version ??= new Version(1, 0, 0);
 
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
-        private static readonly Packet _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>(), false);
+        private static readonly IPacket _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>());
 
         private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
         private readonly int _idleTimeout, _writeTimeout, _maxPacketSize;
         private readonly ILogProvider? _logProvider;
+
+        private IEncryptionProvider? _encryptionProvider;
 
         /// <summary>
         /// Constructor
@@ -41,8 +43,13 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task ReadPacketsAsync(NetworkStream stream, Func<Packet, Task> onPacket,
-            CancellationToken cancellationToken, IEncryptionProvider? encryptionProvider = null)
+        public void SetEncryptionProvider(IEncryptionProvider encryptionProvider)
+        {
+            _encryptionProvider = encryptionProvider;
+        }
+
+        /// <inheritdoc/>
+        public async Task ReadPacketsAsync(NetworkStream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -67,7 +74,7 @@ namespace Portly.Core.PacketHandling.Protocols
                 if (packetLength < 0) throw new IOException("Invalid packet length");
                 if (packetLength > _maxPacketSize) throw new IOException($"Packet too large: {packetLength} bytes");
 
-                Packet packet;
+                IPacket packet;
                 if (packetLength == 0)
                 {
                     // Zero-length packet - KeepAlive packet
@@ -109,23 +116,22 @@ namespace Portly.Core.PacketHandling.Protocols
 
                 try
                 {
-                    packet = encryptionProvider?.Decrypt(packet) ?? packet;
+                    if (packet.Encrypted)
+                        packet.Decrypt(_encryptionProvider);
                 }
                 catch (Exception ex)
                 {
                     throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
-                var msg = packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.";
-                _logProvider?.Log(msg, LogLevel.Debug);
+                _logProvider?.Log(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.", LogLevel.Debug);
 
                 await onPacket(packet);
             }
         }
 
         /// <inheritdoc/>
-        public async Task<Packet> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken cancellationToken,
-            IEncryptionProvider? encryptionProvider = null)
+        public async Task<IPacket> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken cancellationToken = default)
         {
             byte[] lengthBuffer = new byte[4];
 
@@ -161,7 +167,7 @@ namespace Portly.Core.PacketHandling.Protocols
                     offset += r;
                 }
 
-                Packet packet;
+                IPacket packet;
                 try
                 {
                     packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: cancellationToken);
@@ -174,7 +180,8 @@ namespace Portly.Core.PacketHandling.Protocols
 
                 try
                 {
-                    packet = encryptionProvider?.Decrypt(packet) ?? packet;
+                    if (packet.Encrypted)
+                        packet.Decrypt(_encryptionProvider);
                 }
                 catch (Exception ex)
                 {
@@ -192,8 +199,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task SendPacketAsync(NetworkStream stream, Packet packet,
-            CancellationToken cancellationToken, IEncryptionProvider? encryptionProvider = null)
+        public async Task SendPacketAsync(NetworkStream stream, IPacket packet, bool encrypted, CancellationToken cancellationToken = default)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {
@@ -206,9 +212,8 @@ namespace Portly.Core.PacketHandling.Protocols
 
             try
             {
-                // Only encrypt once
-                if (packet.SerializedPacket == null)
-                    packet = encryptionProvider?.Encrypt(packet) ?? packet;
+                if (encrypted)
+                    packet.Encrypt(_encryptionProvider);
             }
             catch (Exception ex)
             {
@@ -216,14 +221,14 @@ namespace Portly.Core.PacketHandling.Protocols
             }
 
             // Nonce, timestamp setup
-            if (packet.Nonce == null || packet.TimestampUtc == null)
+            if (packet.Nonce == null || packet.CreationTimestampUtc == null)
             {
                 var (nonce, timestampUtc) = ReplayProtection.CreateNonceWithTimestamp();
                 packet.Nonce = nonce;
-                packet.TimestampUtc = timestampUtc;
+                packet.CreationTimestampUtc = timestampUtc;
             }
 
-            byte[] payload = packet.SerializedPacket ??= MessagePackSerializer.Serialize(packet, options: _messagePackSerializerOptions);
+            byte[] payload = MessagePackSerializer.Serialize(typeof(Packet), packet, options: _messagePackSerializerOptions);
 
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");

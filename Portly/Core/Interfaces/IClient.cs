@@ -1,6 +1,4 @@
-﻿using Portly.Core.PacketHandling;
-
-namespace Portly.Core.Interfaces
+﻿namespace Portly.Core.Interfaces
 {
     /// <summary>
     /// Represents the client-side data object
@@ -19,8 +17,9 @@ namespace Portly.Core.Interfaces
         /// Sends a packet asynchronously to the connected server.
         /// </summary>
         /// <param name="packet"></param>
+        /// <param name="encrypt"></param>
         /// <returns></returns>
-        Task SendPacketAsync(Packet packet);
+        Task SendPacketAsync(IPacket packet, bool encrypt);
 
         /// <summary>
         /// Disconnects asynchronously from the connected server.

@@ -1,23 +1,22 @@
-﻿using Portly.Core.PacketHandling;
-
-namespace Portly.Core.Interfaces
+﻿namespace Portly.Core.Interfaces
 {
     /// <summary>
-    /// Packet encryption structure
+    /// Encryption provider
     /// </summary>
     public interface IEncryptionProvider
     {
         /// <summary>
-        /// Encrypts a packet.
+        /// Encrypts the data.
         /// </summary>
-        /// <param name="packet"></param>
+        /// <param name="data"></param>
         /// <returns></returns>
-        Packet Encrypt(Packet packet);
+        byte[] Encrypt(byte[] data);
+
         /// <summary>
-        /// Decrypts a packet.
+        /// Decrypts the data.
         /// </summary>
-        /// <param name="packet"></param>
+        /// <param name="data"></param>
         /// <returns></returns>
-        Packet Decrypt(Packet packet);
+        byte[] Decrypt(byte[] data);
     }
 }
