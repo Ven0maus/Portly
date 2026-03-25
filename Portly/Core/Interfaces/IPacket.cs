@@ -20,17 +20,17 @@ namespace Portly.Core.Interfaces
         /// <summary>
         /// The nonce of the packet.
         /// </summary>
-        string? Nonce { get; set; }
+        string? Nonce { get; init; }
+
+        /// <summary>
+        /// The timestamp the packet was created in UTC.
+        /// </summary>
+        DateTime? CreationTimestampUtc { get; init; }
 
         /// <summary>
         /// Determines if the packet is encrypted or not.
         /// </summary>
         bool Encrypted { get; init; }
-
-        /// <summary>
-        /// The timestamp the packet was created in UTC.
-        /// </summary>
-        DateTime? CreationTimestampUtc { get; set; }
 
         /// <summary>
         /// Encrypts the payload.

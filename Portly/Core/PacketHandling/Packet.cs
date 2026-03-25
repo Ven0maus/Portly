@@ -1,5 +1,6 @@
 ﻿using MessagePack;
 using Portly.Core.Interfaces;
+using Portly.Core.Networking;
 using Portly.PacketHandling;
 
 namespace Portly.Core.PacketHandling
@@ -41,13 +42,13 @@ namespace Portly.Core.PacketHandling
         /// The nonce of the packet.
         /// </summary>
         [Key(3)]
-        public string? Nonce { get; set; }
+        public string? Nonce { get; init; }
 
         /// <summary>
         /// The timestamp the packet was created in UTC.
         /// </summary>
         [Key(4)]
-        public DateTime? CreationTimestampUtc { get; set; }
+        public DateTime? CreationTimestampUtc { get; init; }
 
         [SerializationConstructor]
         internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted, string? nonce = null, DateTime? creationTimestampUtc = null)
@@ -55,8 +56,16 @@ namespace Portly.Core.PacketHandling
             Identifier = identifier;
             Payload = payload;
             Encrypted = encrypted;
-            Nonce = nonce;
-            CreationTimestampUtc = creationTimestampUtc;
+
+            if (nonce == null || creationTimestampUtc == null)
+            {
+                (Nonce, CreationTimestampUtc) = ReplayProtection.CreateNonceWithTimestamp();
+            }
+            else
+            {
+                Nonce = nonce;
+                CreationTimestampUtc = creationTimestampUtc;
+            }
         }
 
         /// <summary>
