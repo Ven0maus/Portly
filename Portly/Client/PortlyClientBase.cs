@@ -5,6 +5,7 @@ using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
+using Portly.Core.Serialization;
 using Portly.Core.Utilities;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -69,11 +70,13 @@ namespace Portly.Client
         /// Constructor
         /// </summary>
         /// <param name="packetProtocol"></param>
+        /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
         /// <param name="noDelay">Enable if low latency matters (games, real-time systems, RPC)</param>
-        internal PortlyClientBase(IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null, bool noDelay = false)
+        internal PortlyClientBase(IPacketProtocol? packetProtocol = null, IPacketSerializationProvider? packetSerializationProvider = null, ILogProvider? logProvider = null, bool noDelay = false)
         {
-            _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), logProvider: logProvider);
+            var packetSerializer = packetSerializationProvider ?? new MessagePackSerializationProvider();
+            _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), packetSerializer, logProvider: logProvider);
             _noDelay = noDelay;
             LogProvider = logProvider;
         }

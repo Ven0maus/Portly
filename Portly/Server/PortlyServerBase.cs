@@ -6,6 +6,7 @@ using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
+using Portly.Core.Serialization;
 using Portly.Core.Utilities;
 using Portly.Core.Utilities.Logging;
 using System.Collections.Concurrent;
@@ -32,6 +33,8 @@ namespace Portly.Server
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
         private readonly ReplayProtection _replayProtection;
+        private readonly IPacketSerializationProvider _packetSerializationProvider;
+        private readonly Func<IPacketProtocol> _packetProtocol;
 
         /// <summary>
         /// The log provider that is used.
@@ -71,12 +74,16 @@ namespace Portly.Server
         /// Constructor
         /// </summary>
         /// <param name="packetProtocol"></param>
+        /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
-        internal PortlyServerBase(IPacketProtocol? packetProtocol = null, ILogProvider? logProvider = null)
+        internal PortlyServerBase(Func<IPacketProtocol>? packetProtocol = null, IPacketSerializationProvider? packetSerializationProvider = null, ILogProvider? logProvider = null)
         {
+            _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             LogProvider = logProvider;
             Configuration = ServerConfiguration.Load(logProvider: LogProvider);
             Configuration.Validate();
+
+            _packetProtocol = packetProtocol ?? (() => new DefaultPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
 
             var ipToUse = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
@@ -263,7 +270,7 @@ namespace Portly.Server
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(new DefaultPacketProtocol(Configuration.ConnectionSettings, LogProvider), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl);
+            var connection = new ServerClient(_packetProtocol.Invoke(), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl);
             _clients[connection.Id] = connection;
 
             LogProvider?.Log($"[{connection.Id}]: Connecting to server..");
@@ -445,6 +452,7 @@ namespace Portly.Server
 
         private async Task<bool> PerformSecureHandshakeAsync(ServerClient connection)
         {
+            // TODO: Rework to support custom handshake/encryption providers?
             // 1. Send server identity public key
             byte[] publicKey = _trustServer.GetPublicKey();
 

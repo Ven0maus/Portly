@@ -4,7 +4,7 @@ namespace Portly.Server
 {
     internal class Program
     {
-        private static readonly PortlyServer _server = new(LogProviderBase.Default);
+        private static readonly PortlyServer _server = new(logProvider: LogProviderBase.Default);
 
         private static async Task Main()
         {

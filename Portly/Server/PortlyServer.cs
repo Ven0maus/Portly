@@ -22,7 +22,7 @@ namespace Portly.Server
     public class PortlyServer : PortlyServerBase
     {
         /// <inheritdoc/>
-        public PortlyServer(ILogProvider? logProvider = null) : base(logProvider: logProvider)
+        public PortlyServer(Func<IPacketProtocol>? packetProtocol = null, IPacketSerializationProvider? packetSerializationProvider = null, ILogProvider? logProvider = null) : base(packetProtocol, packetSerializationProvider, logProvider: logProvider)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);

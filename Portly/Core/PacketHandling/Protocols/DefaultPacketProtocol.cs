@@ -1,5 +1,4 @@
-﻿using MessagePack;
-using Portly.Core.Configuration.Settings;
+﻿using Portly.Core.Configuration.Settings;
 using Portly.Core.Interfaces;
 using Portly.Core.Utilities.Logging;
 using System.Buffers;
@@ -20,11 +19,9 @@ namespace Portly.Core.PacketHandling.Protocols
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
         private static readonly IPacket _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>());
 
-        private static readonly MessagePackSerializerOptions _messagePackSerializerOptions = MessagePackSerializerOptions.Standard
-            .WithSecurity(MessagePackSecurity.UntrustedData);
-
         private readonly int _idleTimeout, _writeTimeout, _maxPacketSize;
         private readonly ILogProvider? _logProvider;
+        private readonly IPacketSerializationProvider _packetSerializer;
 
         private IEncryptionProvider? _encryptionProvider;
 
@@ -32,13 +29,15 @@ namespace Portly.Core.PacketHandling.Protocols
         /// Constructor
         /// </summary>
         /// <param name="connectionSettings"></param>
+        /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
-        public DefaultPacketProtocol(ConnectionSettings connectionSettings, ILogProvider? logProvider = null)
+        public DefaultPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
         {
             _idleTimeout = connectionSettings.IdleTimeoutSeconds;
             _writeTimeout = connectionSettings.WriteTimeoutSeconds;
             _maxPacketSize = connectionSettings.MaxRequestSizeBytes;
             _logProvider = logProvider;
+            _packetSerializer = packetSerializationProvider;
         }
 
         /// <inheritdoc/>
@@ -97,7 +96,7 @@ namespace Portly.Core.PacketHandling.Protocols
 
                         try
                         {
-                            packet = MessagePackSerializer.Deserialize<Packet>(dataBuffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: readToken);
+                            packet = _packetSerializer.Deserialize<Packet>(dataBuffer.AsMemory(0, packetLength), cancellationToken);
                         }
                         catch (Exception ex)
                         {
@@ -169,7 +168,7 @@ namespace Portly.Core.PacketHandling.Protocols
                 IPacket packet;
                 try
                 {
-                    packet = MessagePackSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), _messagePackSerializerOptions, cancellationToken: cancellationToken);
+                    packet = _packetSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), cancellationToken);
                     clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
                 }
                 catch (Exception ex)
@@ -219,7 +218,7 @@ namespace Portly.Core.PacketHandling.Protocols
                 throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
             }
 
-            byte[] payload = MessagePackSerializer.Serialize(typeof(Packet), packet, options: _messagePackSerializerOptions, cancellationToken);
+            byte[] payload = _packetSerializer.Serialize(packet, cancellationToken);
 
             if (payload.Length > _maxPacketSize)
                 throw new InvalidOperationException($"Packet too large: {payload.Length}");

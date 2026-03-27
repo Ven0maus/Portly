@@ -21,7 +21,7 @@ namespace Portly.Client
     public class PortlyClient : PortlyClientBase
     {
         /// <inheritdoc/>
-        public PortlyClient(ILogProvider? logProvider, bool noDelay = false) : base(null, logProvider, noDelay)
+        public PortlyClient(ILogProvider? logProvider, bool noDelay = false) : base(logProvider: logProvider, noDelay: noDelay)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
