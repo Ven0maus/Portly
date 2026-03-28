@@ -32,8 +32,7 @@ namespace Portly.Client
             string reason = string.Empty;
             if (packet.Payload.Length != 0)
                 reason = ((Packet<string>)packet).Payload;
-
-            await ((PortlyClient)client).DisconnectInternalAsync(false, reason);
+            await OnServerDisconnectedAsync(reason);
         }
     }
 }

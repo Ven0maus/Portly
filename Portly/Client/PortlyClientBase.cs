@@ -197,6 +197,17 @@ namespace Portly.Client
             await DisconnectInternalAsync(true);
         }
 
+        /// <summary>
+        /// Call this method when the server tells the client to disconnect with a specified reason.
+        /// <br>This will properly handle disconnecting async without replying back to the server.</br>
+        /// </summary>
+        /// <param name="reason"></param>
+        /// <returns></returns>
+        protected virtual Task OnServerDisconnectedAsync(string reason)
+        {
+            return DisconnectInternalAsync(false, reason);
+        }
+
         /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
@@ -347,7 +358,9 @@ namespace Portly.Client
 
         private async Task PerformLiteHandshakeAsync(CancellationToken token)
         {
-            await SendPacketInternalAsync(_stream!, Packet.Create(
+            var stream = _stream ?? throw new InvalidOperationException("Stream not initialized.");
+
+            await SendPacketInternalAsync(stream, Packet.Create(
                 PacketType.LiteHandshake,
                 new LiteHandshake
                 {
@@ -355,7 +368,7 @@ namespace Portly.Client
                     ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
                 }), false);
 
-            var result = await _packetProtocol.ReceiveSinglePacketAsync(_stream!, token);
+            var result = await _packetProtocol.ReceiveSinglePacketAsync(stream, token);
 
             if (result == null || result.Identifier.Id != (int)PacketType.LiteHandshake || result.Payload == null)
                 throw new Exception("Invalid lite handshake packet.");
@@ -368,7 +381,9 @@ namespace Portly.Client
 
         private async Task PerformSecureHandshakeAsync(string host, int port, CancellationToken token)
         {
-            var publicKeyPacket = await _packetProtocol.ReceiveSinglePacketAsync(_stream!, token);
+            var stream = _stream ?? throw new InvalidOperationException("Stream not initialized.");
+
+            var publicKeyPacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, token);
             if (publicKeyPacket == null || publicKeyPacket.Identifier.Id != (int)PacketType.SecureHandshake || publicKeyPacket.Payload == null)
                 throw new Exception("Invalid handshake packet.");
 
@@ -388,11 +403,11 @@ namespace Portly.Client
                 ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
             };
 
-            await SendPacketInternalAsync(_stream!, Packet<ClientHandshake>.Create(
+            await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
                 PacketType.SecureHandshake,
                 clientHandshake), false);
 
-            var responsePacket = await _packetProtocol.ReceiveSinglePacketAsync(_stream!, token);
+            var responsePacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, token);
 
             if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.SecureHandshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
