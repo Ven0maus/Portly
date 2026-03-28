@@ -1,5 +1,4 @@
 ﻿using Portly.Core.Interfaces;
-using System.Net.Sockets;
 
 namespace Portly.Core.PacketHandling
 {
@@ -27,7 +26,7 @@ namespace Portly.Core.PacketHandling
         /// <param name="encrypt"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task SendPacketAsync(NetworkStream stream, IPacket packet, bool encrypt, CancellationToken cancellationToken = default);
+        Task SendPacketAsync(Stream stream, IPacket packet, bool encrypt, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Single packet receive implementation
@@ -35,7 +34,7 @@ namespace Portly.Core.PacketHandling
         /// <param name="stream"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task<IPacket> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken cancellationToken = default);
+        Task<IPacket> ReceiveSinglePacketAsync(Stream stream, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Continuous packet receive implementation
@@ -44,6 +43,6 @@ namespace Portly.Core.PacketHandling
         /// <param name="onPacket"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task ReadPacketsAsync(NetworkStream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default);
+        Task ReadPacketsAsync(Stream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default);
     }
 }

@@ -3,7 +3,6 @@ using Portly.Core.Interfaces;
 using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using System.Net;
-using System.Net.Sockets;
 
 namespace Portly.Server
 {
@@ -12,15 +11,15 @@ namespace Portly.Server
     /// </summary>
     /// <param name="packetProtocol"></param>
     /// <param name="configuration"></param>
-    /// <param name="client"></param>
+    /// <param name="connection"></param>
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
-    internal class ServerClient(IPacketProtocol packetProtocol, ServerConfiguration configuration, TcpClient client,
+    internal class ServerClient(IPacketProtocol packetProtocol, ServerConfiguration configuration, ITransportConnection connection,
         KeepAliveManager<ServerClient> keepAliveManager, EventHandler<IServerClient>? onDisconnect) : IServerClient
     {
-        public TcpClient TcpClient { get; } = client;
-        public NetworkStream Stream { get; } = client.GetStream();
-        public IPAddress IpAddress { get; } = (client.Client.RemoteEndPoint as IPEndPoint
+        public ITransportConnection Connection { get; } = connection;
+        public Stream Stream { get; } = connection.Stream;
+        public IPAddress IpAddress { get; } = (connection.RemoteEndPoint as IPEndPoint
                  ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address.MapToIPv6();
         public CancellationTokenSource Cancellation { get; } = new();
         public ClientRateLimiter ClientRateLimiter { get; } = new(configuration.RateLimits);
@@ -38,7 +37,7 @@ namespace Portly.Server
 
         public async Task SendPacketAsync(IPacket packet, bool encrypt, CancellationToken cancellationToken = default)
         {
-            if (!TcpClient.Connected)
+            if (!Connection.IsConnected)
                 throw new InvalidOperationException("Client not connected.");
 
             await _sendLock.WaitAsync();
@@ -75,7 +74,7 @@ namespace Portly.Server
 
             try { Cancellation.Cancel(); } catch { }
             try { Stream.Close(); } catch { }
-            try { TcpClient.Close(); } catch { }
+            try { await Connection.CloseAsync(); } catch { }
 
             _keepAliveManager.Unregister(this);
             _onDisconnect?.Invoke(this, this);

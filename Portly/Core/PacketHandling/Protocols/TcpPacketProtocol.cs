@@ -3,14 +3,13 @@ using Portly.Core.Interfaces;
 using Portly.Core.Utilities.Logging;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Net.Sockets;
 
 namespace Portly.Core.PacketHandling.Protocols
 {
     /// <summary>
-    /// Provides a default implementation that uses MessagePack and AES encryption support.
+    /// Provides a default tcp implementation that uses MessagePack and AES encryption support.
     /// </summary>
-    public sealed class DefaultPacketProtocol : IPacketProtocol
+    public sealed class TcpPacketProtocol : IPacketProtocol
     {
         private Version? _version;
         /// <inheritdoc/>
@@ -31,7 +30,7 @@ namespace Portly.Core.PacketHandling.Protocols
         /// <param name="connectionSettings"></param>
         /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
-        public DefaultPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
+        public TcpPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
         {
             _idleTimeout = connectionSettings.IdleTimeoutSeconds;
             _writeTimeout = connectionSettings.WriteTimeoutSeconds;
@@ -47,7 +46,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task ReadPacketsAsync(NetworkStream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default)
+        public async Task ReadPacketsAsync(Stream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -129,7 +128,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task<IPacket> ReceiveSinglePacketAsync(NetworkStream stream, CancellationToken cancellationToken = default)
+        public async Task<IPacket> ReceiveSinglePacketAsync(Stream stream, CancellationToken cancellationToken = default)
         {
             byte[] lengthBuffer = new byte[4];
 
@@ -197,7 +196,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task SendPacketAsync(NetworkStream stream, IPacket packet, bool encrypted, CancellationToken cancellationToken = default)
+        public async Task SendPacketAsync(Stream stream, IPacket packet, bool encrypted, CancellationToken cancellationToken = default)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {

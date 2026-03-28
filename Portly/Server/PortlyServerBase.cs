@@ -7,11 +7,11 @@ using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Serialization;
+using Portly.Core.Transports;
 using Portly.Core.Utilities;
 using Portly.Core.Utilities.Logging;
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 
 namespace Portly.Server
@@ -21,7 +21,7 @@ namespace Portly.Server
     /// </summary>
     public abstract class PortlyServerBase
     {
-        private readonly TcpListener _listener;
+        private readonly IServerTransport _serverTransport;
         private readonly TrustServer _trustServer;
         private readonly CancellationTokenSource _cts;
 
@@ -74,11 +74,14 @@ namespace Portly.Server
         /// <summary>
         /// Constructor
         /// </summary>
+        /// <param name="serverTransport"></param>
         /// <param name="packetProtocol"></param>
         /// <param name="packetSerializationProvider"></param>
         /// <param name="encryptionProvider"></param>
         /// <param name="logProvider"></param>
-        internal PortlyServerBase(Func<IPacketProtocol>? packetProtocol = null,
+        internal PortlyServerBase(
+            IServerTransport? serverTransport = null,
+            Func<IPacketProtocol>? packetProtocol = null,
             IPacketSerializationProvider? packetSerializationProvider = null,
             Func<byte[], IEncryptionProvider>? encryptionProvider = null,
             ILogProvider? logProvider = null)
@@ -89,7 +92,7 @@ namespace Portly.Server
 
             _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
-            _packetProtocol = packetProtocol ?? (() => new DefaultPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
+            _packetProtocol = packetProtocol ?? (() => new TcpPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
 
             var ipToUse = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
@@ -98,7 +101,7 @@ namespace Portly.Server
                 ipToUse = ipAddress;
             }
 
-            _listener = new TcpListener(ipToUse, Configuration.ConnectionSettings.Port);
+            _serverTransport = serverTransport ?? new TcpServerTransport(ipToUse, Configuration.ConnectionSettings.Port);
             _trustServer = new TrustServer();
             _cts = new();
 
@@ -116,24 +119,15 @@ namespace Portly.Server
         /// <returns></returns>
         public async Task StartAsync()
         {
-            _listener.Start(Configuration.ConnectionSettings.MaxPendingConnectionBacklog);
-            LogProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
-
-            _ = Task.Run(async () =>
+            _serverTransport.OnClientAccepted += connection =>
             {
-                try
-                {
-                    _ = _keepAliveManager.StartAsync(_cts.Token);
-                    while (!_cts.Token.IsCancellationRequested)
-                    {
-                        var client = await _listener.AcceptTcpClientAsync(_cts.Token);
-                        if (Configuration.ConnectionSettings.NoTcpDelay)
-                            client.NoDelay = true;
-                        _ = HandleClientAsync(client, _cts.Token);
-                    }
-                }
-                catch (OperationCanceledException) { }
-            });
+                _ = HandleClientSafeAsync(connection, _cts.Token);
+                return Task.CompletedTask;
+            };
+
+            _ = _keepAliveManager.StartAsync(_cts.Token);
+            LogProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
+            await _serverTransport.StartAsync(_cts.Token);
         }
 
         /// <summary>
@@ -144,7 +138,15 @@ namespace Portly.Server
         {
             LogProvider?.Log("Stopping server..");
             _cts.Cancel();  // stop accepting new clients
-            _listener.Stop();
+
+            try
+            {
+                await _serverTransport.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                LogProvider?.Log($"Transport stop error: {ex.Message}", LogLevel.Warning);
+            }
 
             // cancel all client loops
             foreach (var connection in _clients.Values.ToArray())
@@ -274,7 +276,7 @@ namespace Portly.Server
             }
         }
 
-        private async Task HandleClientAsync(TcpClient client, CancellationToken serverToken)
+        private async Task HandleClientAsync(ITransportConnection client, CancellationToken serverToken)
         {
             var connection = new ServerClient(_packetProtocol.Invoke(), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl);
             _clients[connection.Id] = connection;
@@ -326,9 +328,9 @@ namespace Portly.Server
                 // Start loops
                 var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(serverToken, connection.Cancellation.Token);
 
-                var clientTask = Task.Run(async () =>
+                connection.ClientTask = Task.Run(async () =>
                 {
-                    var remoteEndpoint = connection.TcpClient.Client.RemoteEndPoint;
+                    var remoteEndpoint = connection.Connection.RemoteEndPoint;
                     try
                     {
                         // Incrmeent ip connection count
@@ -373,6 +375,26 @@ namespace Portly.Server
 
                 LogProvider?.Log($"[{connection.Id}]: Exception:", LogLevel.Error);
                 PrintException(ex);
+            }
+        }
+
+        private async Task HandleClientSafeAsync(ITransportConnection connection, CancellationToken token)
+        {
+            if (_cts.IsCancellationRequested)
+            {
+                try { await connection.CloseAsync(); } catch { }
+                return;
+            }
+
+            try
+            {
+                await HandleClientAsync(connection, token);
+            }
+            catch (Exception ex)
+            {
+                LogProvider?.Log($"Unhandled client error: {ex.Message}", LogLevel.Error);
+
+                try { await connection.CloseAsync(); } catch { }
             }
         }
 
@@ -437,7 +459,7 @@ namespace Portly.Server
                 return (false, "Server is full.");
 
             // Verify if tcp client
-            var remoteEndPoint = connection.TcpClient.Client.RemoteEndPoint as IPEndPoint;
+            var remoteEndPoint = connection.Connection.RemoteEndPoint as IPEndPoint;
             if (remoteEndPoint == null)
                 return (false, "Unable to determine client IP.");
 
