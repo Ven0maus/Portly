@@ -53,11 +53,7 @@ namespace Portly.Client
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
 
         private readonly SemaphoreSlim _sendLock = new(1, 1);
-
-        /// <summary>
-        /// Logging provider implementation.
-        /// </summary>
-        public readonly ILogProvider? LogProvider;
+        private readonly ILogProvider? _logProvider;
 
         private readonly KeepAliveManager<PortlyClientBase> _keepAliveManager =
             new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60),
@@ -119,7 +115,7 @@ namespace Portly.Client
 
             _cts = new CancellationTokenSource();
 
-            LogProvider = logProvider;
+            _logProvider = logProvider;
         }
 
         /// <inheritdoc/>
@@ -166,7 +162,7 @@ namespace Portly.Client
                     }
                     catch (Exception ex)
                     {
-                        LogProvider?.Log($"Background task error: {ex}");
+                        _logProvider?.Log($"Background task error: {ex}");
                     }
                     finally
                     {
@@ -269,7 +265,7 @@ namespace Portly.Client
 
                 if (!sendMessageToServer)
                 {
-                    LogProvider?.Log(string.IsNullOrWhiteSpace(reason)
+                    _logProvider?.Log(string.IsNullOrWhiteSpace(reason)
                         ? "You lost connection to the server."
                         : $"You lost connection to the server: {reason}");
                 }

@@ -21,7 +21,12 @@ namespace Portly.Client
     public class PortlyClient : PortlyClientBase
     {
         /// <inheritdoc/>
-        public PortlyClient(ILogProvider? logProvider) : base(logProvider: logProvider)
+        public PortlyClient(Func<IClientTransport>? clientTransport = null,
+            IPacketProtocol? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null) :
+            base(clientTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);

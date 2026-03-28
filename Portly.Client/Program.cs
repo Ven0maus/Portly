@@ -5,7 +5,7 @@ namespace Portly.Client
 {
     internal class Program
     {
-        private static readonly PortlyClient _client = new(LogProviderBase.Default);
+        private static readonly PortlyClient _client = new(logProvider: LogProviderBase.Default);
 
         private static async Task Main()
         {
