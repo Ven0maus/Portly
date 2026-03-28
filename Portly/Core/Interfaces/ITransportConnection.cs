@@ -8,12 +8,12 @@ namespace Portly.Core.Interfaces
     public interface ITransportConnection : IAsyncDisposable
     {
         /// <summary>
-        /// The remote endpoint of the transport connection.
+        /// The remote endpoint of the connection.
         /// </summary>
         EndPoint RemoteEndPoint { get; }
 
         /// <summary>
-        /// The stream of the transport connection.
+        /// The stream of the connection.
         /// </summary>
         Stream Stream { get; }
 
@@ -23,7 +23,7 @@ namespace Portly.Core.Interfaces
         bool IsConnected { get; }
 
         /// <summary>
-        /// Asynchronously closes the transport connection.
+        /// Asynchronously closes the connection.
         /// </summary>
         /// <returns></returns>
         Task CloseAsync();

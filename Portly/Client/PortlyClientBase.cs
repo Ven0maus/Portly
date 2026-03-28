@@ -6,8 +6,8 @@ using Portly.Core.Networking;
 using Portly.Core.PacketHandling;
 using Portly.Core.PacketHandling.Protocols;
 using Portly.Core.Serialization;
+using Portly.Core.Transports;
 using Portly.Core.Utilities;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -30,12 +30,29 @@ namespace Portly.Client
     public abstract class PortlyClientBase : IClient
     {
         private readonly TrustClient _trustClient = new();
-        private TcpClient? _client;
-        private NetworkStream? _stream;
-        private int _connected = 0;
+        private readonly IClientTransport _clientTransport;
+
+        private int _connected = 0;     // 0 = disconnected, 1 = connected
+        private int _disconnecting = 0; // 0 = not disconnecting, 1 = disconnecting
+        private int _cleanupCalled = 0; // 0 = not cleaned, 1 = cleaned
+
         private CancellationTokenSource? _cts;
+        private Task? _backgroundTask;
+
+        private readonly object _ctsLock = new();
+
+        private CancellationToken Token
+        {
+            get
+            {
+                var cts = Volatile.Read(ref _cts);
+                if (cts == null)
+                    throw new InvalidOperationException("Client not initialized.");
+                return cts.Token;
+            }
+        }
+
         private readonly SemaphoreSlim _sendLock = new(1, 1);
-        private readonly bool _noDelay;
         private readonly PacketRouter<IClient> _packetRouter = new();
         private readonly IPacketProtocol _packetProtocol;
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
@@ -68,14 +85,22 @@ namespace Portly.Client
         public event EventHandler? OnDisconnected;
 
         /// <summary>
+        /// Determines if the client is fully connected to the server.
+        /// </summary>
+        public bool Connected => Volatile.Read(ref _connected) == 1;
+
+        /// <summary>
         /// Constructor
         /// </summary>
+        /// <param name="clientTransport"></param>
         /// <param name="packetProtocol"></param>
         /// <param name="packetSerializationProvider"></param>
         /// <param name="encryptionProvider"></param>
         /// <param name="logProvider"></param>
         /// <param name="noDelay">Enable if low latency matters (games, real-time systems, RPC)</param>
-        internal PortlyClientBase(IPacketProtocol? packetProtocol = null,
+        internal PortlyClientBase(
+            IClientTransport? clientTransport = null,
+            IPacketProtocol? packetProtocol = null,
             IPacketSerializationProvider? packetSerializationProvider = null,
             Func<byte[], IEncryptionProvider>? encryptionProvider = null,
             ILogProvider? logProvider = null, bool noDelay = false)
@@ -83,7 +108,8 @@ namespace Portly.Client
             var packetSerializer = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
             _packetProtocol = packetProtocol ?? new LengthPrefixedPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), packetSerializer, logProvider: logProvider);
-            _noDelay = noDelay;
+            _clientTransport = clientTransport ?? new TcpClientTransport();
+            _cts = new CancellationTokenSource();
             LogProvider = logProvider;
         }
 
@@ -93,48 +119,36 @@ namespace Portly.Client
             if (Interlocked.CompareExchange(ref _connected, 1, 0) != 0)
                 throw new InvalidOperationException("Already connected.");
 
-            TcpClient? client = null;
-            NetworkStream? stream = null;
-            var cts = new CancellationTokenSource();
+            var cts = Volatile.Read(ref _cts)!;
+            var token = cts.Token;
 
             try
             {
-                client = new TcpClient();
-                if (_noDelay)
-                    client.NoDelay = true;
+                await _clientTransport.ConnectAsync(host, port, token);
 
-                await client.ConnectAsync(host, port);
-                stream = client.GetStream();
+                await PerformLiteHandshakeAsync();
+                await PerformSecureHandshakeAsync(host, port);
 
-                // --- HANDSHAKE ---
-                await PerformLiteHandshakeAsync(stream);
-                await PerformSecureHandshakeAsync(stream, host, port);
-
-                // Assign ONLY after successful handshake
-                _client = client;
-                _stream = stream;
-                _cts = cts;
-
-                var token = cts.Token;
-                var receiveTask = _packetProtocol.ReadPacketsAsync(stream, async packet =>
+                var receiveTask = _packetProtocol.ReadPacketsAsync(_clientTransport.Stream, async packet =>
                 {
                     _keepAliveManager.UpdateLastReceived(this);
+
                     var task = Router.RouteAsync(this, packet);
                     if (task != null)
                         await task;
-                    OnPacketReceived?.Invoke(this, packet);
-                }, cts.Token);
 
-                // Update initial state
+                    OnPacketReceived?.Invoke(this, packet);
+                }, token);
+
                 _keepAliveManager.Register(this);
 
-                var KeepAliveTask = _keepAliveManager.StartAsync(cts.Token);
+                var keepAliveTask = _keepAliveManager.StartAsync(token);
 
-                _ = Task.Run(async () =>
+                _backgroundTask = Task.Run(async () =>
                 {
                     try
                     {
-                        await Task.WhenAny(receiveTask, KeepAliveTask);
+                        await Task.WhenAny(receiveTask, keepAliveTask);
                     }
                     finally
                     {
@@ -146,19 +160,43 @@ namespace Portly.Client
             }
             catch
             {
-                try { cts.Cancel(); } catch { }
-                try { stream?.Dispose(); } catch { }
-                try { client?.Dispose(); } catch { }
-
                 Interlocked.Exchange(ref _connected, 0);
+                await SafeCleanupAsync();
                 throw;
             }
+        }
+
+        private async Task SafeCleanupAsync()
+        {
+            if (Interlocked.Exchange(ref _cleanupCalled, 1) == 1)
+                return;
+
+            try
+            {
+                CancelAndDisposeCts();
+
+                try { await _clientTransport.DisconnectAsync(); } catch { }
+                try { await _clientTransport.DisposeAsync(); } catch { }
+            }
+            catch
+            {
+                // swallow to guarantee cleanup does not throw
+            }
+        }
+
+        private void CancelAndDisposeCts()
+        {
+            var cts = Interlocked.Exchange(ref _cts, null);
+            if (cts == null) return;
+
+            try { cts.Cancel(); } catch { }
+            cts.Dispose();
         }
 
         /// <inheritdoc/>
         public async Task SendPacketAsync(IPacket packet, bool encrypt)
         {
-            await SendPacketInternalAsync(_stream, packet, encrypt);
+            await SendPacketInternalAsync(_clientTransport.Stream, packet, encrypt);
         }
 
         /// <inheritdoc/>
@@ -167,9 +205,9 @@ namespace Portly.Client
             await DisconnectInternalAsync(true);
         }
 
-        private async Task SendPacketInternalAsync(NetworkStream? stream, IPacket packet, bool encrypt)
+        private async Task SendPacketInternalAsync(Stream? stream, IPacket packet, bool encrypt)
         {
-            if (Volatile.Read(ref _connected) == 0)
+            if (!Connected)
                 throw new InvalidOperationException("Not connected.");
 
             if (stream == null)
@@ -189,15 +227,18 @@ namespace Portly.Client
 
         internal async Task DisconnectInternalAsync(bool sendMessageToServer, string reason = "")
         {
-            // Only prevent re-entry at the end, not before sending the packet
-            int prev = Interlocked.Exchange(ref _connected, 1); // temporary mark as connected
-            if (prev == 0)
+            if (Interlocked.Exchange(ref _disconnecting, 1) == 1)
                 return;
+
+            if (Volatile.Read(ref _connected) == 0)
+            {
+                Interlocked.Exchange(ref _disconnecting, 0);
+                return;
+            }
 
             try
             {
-                // Try to send a "disconnect" packet first
-                if (sendMessageToServer && _stream != null)
+                if (sendMessageToServer)
                 {
                     var disconnectPacket = Packet.Create(PacketType.Disconnect, Array.Empty<byte>());
 
@@ -205,41 +246,33 @@ namespace Portly.Client
                     {
                         await SendPacketAsync(disconnectPacket, false);
                     }
-                    catch
-                    {
-                        // Ignore send errors — we still want to close
-                    }
+                    catch { }
                 }
-
-                if (!sendMessageToServer)
+                else
                 {
-                    LogProvider?.Log(string.IsNullOrWhiteSpace(reason) ?
-                        "You lost connection to the server." : $"You lost connection to the server: {reason}");
+                    LogProvider?.Log(string.IsNullOrWhiteSpace(reason)
+                        ? "You lost connection to the server."
+                        : $"You lost connection to the server: {reason}");
                 }
-
-                // Cancel background tasks (KeepAlive, reading)
-                _cts?.Cancel();
-
-                // Dispose the stream and client
-                _stream?.Dispose();
-                _client?.Dispose();
             }
             finally
             {
-                // Now mark disconnected
                 Interlocked.Exchange(ref _connected, 0);
 
-                _stream = null;
-                _client = null;
                 _keepAliveManager.Unregister(this);
+
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
+
+                await SafeCleanupAsync();
+
+                Interlocked.Exchange(ref _disconnecting, 0);
             }
         }
 
-        private async Task PerformLiteHandshakeAsync(NetworkStream stream)
+        private async Task PerformLiteHandshakeAsync()
         {
             // Send protocol version
-            await SendPacketInternalAsync(stream, Packet.Create(
+            await SendPacketInternalAsync(_clientTransport.Stream, Packet.Create(
                 PacketType.LiteHandshake,
                 new LiteHandshake
                 {
@@ -247,7 +280,7 @@ namespace Portly.Client
                     ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
                 }), false);
 
-            var result = await _packetProtocol.ReceiveSinglePacketAsync(stream, default);
+            var result = await _packetProtocol.ReceiveSinglePacketAsync(_clientTransport.Stream, default);
             if (result == null || result.Identifier.Id != (int)PacketType.LiteHandshake || result.Payload == null)
                 throw new Exception("Invalid lite handshake packet.");
 
@@ -256,10 +289,10 @@ namespace Portly.Client
                 throw new Exception(payload ?? "Unable to connect to the server, invalid lite handshake response received.");
         }
 
-        private async Task PerformSecureHandshakeAsync(NetworkStream stream, string host, int port)
+        private async Task PerformSecureHandshakeAsync(string host, int port)
         {
             // 1. Receive server identity public key
-            var publicKeyPacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, default);
+            var publicKeyPacket = await _packetProtocol.ReceiveSinglePacketAsync(_clientTransport.Stream, default);
             var publicKey = publicKeyPacket.Payload;
 
             if (publicKeyPacket == null || publicKeyPacket.Identifier.Id != (int)PacketType.SecureHandshake || publicKey == null)
@@ -281,12 +314,12 @@ namespace Portly.Client
                 ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
             };
 
-            await SendPacketInternalAsync(stream, Packet<ClientHandshake>.Create(
+            await SendPacketInternalAsync(_clientTransport.Stream, Packet<ClientHandshake>.Create(
                 PacketType.SecureHandshake,
                 clientHandshake), false);
 
             // 4. Receive server response
-            var responsePacket = await _packetProtocol.ReceiveSinglePacketAsync(stream, default);
+            var responsePacket = await _packetProtocol.ReceiveSinglePacketAsync(_clientTransport.Stream, default);
             if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.SecureHandshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 
