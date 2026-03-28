@@ -38,6 +38,7 @@ namespace Portly.Client
         private readonly bool _noDelay;
         private readonly PacketRouter<IClient> _packetRouter = new();
         private readonly IPacketProtocol _packetProtocol;
+        private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
 
         /// <summary>
         /// The log provider that is used.
@@ -71,11 +72,16 @@ namespace Portly.Client
         /// </summary>
         /// <param name="packetProtocol"></param>
         /// <param name="packetSerializationProvider"></param>
+        /// <param name="encryptionProvider"></param>
         /// <param name="logProvider"></param>
         /// <param name="noDelay">Enable if low latency matters (games, real-time systems, RPC)</param>
-        internal PortlyClientBase(IPacketProtocol? packetProtocol = null, IPacketSerializationProvider? packetSerializationProvider = null, ILogProvider? logProvider = null, bool noDelay = false)
+        internal PortlyClientBase(IPacketProtocol? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null, bool noDelay = false)
         {
             var packetSerializer = packetSerializationProvider ?? new MessagePackSerializationProvider();
+            _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
             _packetProtocol = packetProtocol ?? new DefaultPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), packetSerializer, logProvider: logProvider);
             _noDelay = noDelay;
             LogProvider = logProvider;
@@ -304,7 +310,7 @@ namespace Portly.Client
                 throw new Exception("Invalid server signature. Possible MITM attack.");
 
             // 6. Derive session key
-            _packetProtocol.SetEncryptionProvider(new AESEncryptionProvider(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey)));
+            _packetProtocol.SetEncryptionProvider(_encryptionProvider.Invoke(keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey)));
         }
     }
 }

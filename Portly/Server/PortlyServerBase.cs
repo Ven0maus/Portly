@@ -35,6 +35,7 @@ namespace Portly.Server
         private readonly ReplayProtection _replayProtection;
         private readonly IPacketSerializationProvider _packetSerializationProvider;
         private readonly Func<IPacketProtocol> _packetProtocol;
+        private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
 
         /// <summary>
         /// The log provider that is used.
@@ -75,14 +76,19 @@ namespace Portly.Server
         /// </summary>
         /// <param name="packetProtocol"></param>
         /// <param name="packetSerializationProvider"></param>
+        /// <param name="encryptionProvider"></param>
         /// <param name="logProvider"></param>
-        internal PortlyServerBase(Func<IPacketProtocol>? packetProtocol = null, IPacketSerializationProvider? packetSerializationProvider = null, ILogProvider? logProvider = null)
+        internal PortlyServerBase(Func<IPacketProtocol>? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null)
         {
-            _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             LogProvider = logProvider;
             Configuration = ServerConfiguration.Load(logProvider: LogProvider);
             Configuration.Validate();
 
+            _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
+            _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
             _packetProtocol = packetProtocol ?? (() => new DefaultPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
 
             var ipToUse = IPAddress.Any;
@@ -511,7 +517,7 @@ namespace Portly.Server
             ), false);
 
             // 7. Derive session key
-            connection.PacketProtocol.SetEncryptionProvider(new AESEncryptionProvider(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey)));
+            connection.PacketProtocol.SetEncryptionProvider(_encryptionProvider.Invoke(keyExchange.DeriveSharedKey(request.Payload.ClientEphemeralKey)));
 
             return true;
         }
