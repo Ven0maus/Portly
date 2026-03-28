@@ -52,13 +52,14 @@ namespace Portly.Server
             }
         }
 
-        public async Task DisconnectAsync(string reason = "")
+        public async Task DisconnectAsync(string reason = "", bool informClient = true)
         {
             if (Interlocked.Exchange(ref _disconnected, 1) == 1)
                 return;
 
             // Send disconnection packet before cancel
-            await SendPacketAsync(Packet.Create(PacketType.Disconnect, reason), default);
+            if (informClient)
+                await SendPacketAsync(Packet.Create(PacketType.Disconnect, reason), default);
             await DisconnectInternalAsync();
         }
 

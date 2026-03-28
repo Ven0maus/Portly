@@ -36,7 +36,7 @@ namespace Portly.Server
 
         private async Task HandleDisconnectPacket(IServerClient client, IPacket packet)
         {
-            await ((ServerClient)client).DisconnectInternalAsync();
+            await client.DisconnectAsync(informClient: false);
         }
     }
 }

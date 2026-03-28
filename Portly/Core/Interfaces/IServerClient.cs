@@ -29,6 +29,6 @@ namespace Portly.Core.Interfaces
         /// <summary>
         /// Disconnects the client from the server, and informing them with a disconnect packet.
         /// </summary>
-        Task DisconnectAsync(string reason = "");
+        Task DisconnectAsync(string reason = "", bool informClient = true);
     }
 }
