@@ -92,7 +92,7 @@ namespace Portly.Server
 
             _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
-            _packetProtocol = packetProtocol ?? (() => new TcpPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
+            _packetProtocol = packetProtocol ?? (() => new LengthPrefixedPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, LogProvider));
 
             var ipToUse = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
