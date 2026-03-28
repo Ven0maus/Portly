@@ -22,11 +22,13 @@ namespace Portly.Server
     public class PortlyServer : PortlyServerBase
     {
         /// <inheritdoc/>
-        public PortlyServer(Func<IPacketProtocol>? packetProtocol = null,
+        public PortlyServer(
+            IServerTransport? serverTransport = null,
+            Func<IPacketProtocol>? packetProtocol = null,
             IPacketSerializationProvider? packetSerializationProvider = null,
             Func<byte[], IEncryptionProvider>? encryptionProvider = null,
             ILogProvider? logProvider = null) :
-            base(packetProtocol, packetSerializationProvider, encryptionProvider, logProvider: logProvider)
+            base(serverTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider: logProvider)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
@@ -34,7 +36,7 @@ namespace Portly.Server
 
         private async Task HandleDisconnectPacket(IServerClient client, IPacket packet)
         {
-            await ((ServerClient)client).DisconnectInternalAsync();
+            await client.DisconnectAsync(informClient: false);
         }
     }
 }

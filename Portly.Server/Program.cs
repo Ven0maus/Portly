@@ -8,17 +8,25 @@ namespace Portly.Server
 
         private static async Task Main()
         {
-            // run the server in background so the main thread continues
-            await _server.StartAsync();
+            // Run server in background
+            var serverTask = Task.Run(() => _server.StartAsync());
 
             Console.WriteLine("Write shutdown to stop the server.");
-            var input = Console.ReadLine();
-            while (string.IsNullOrWhiteSpace(input) || !input.Equals("shutdown", StringComparison.OrdinalIgnoreCase))
+
+            string? input;
+            while ((input = Console.ReadLine()) == null ||
+                   !input.Equals("shutdown", StringComparison.OrdinalIgnoreCase))
             {
-                input = Console.ReadLine();
             }
 
             await _server.StopAsync();
+
+            // Wait for server to fully exit
+            try
+            {
+                await serverTask;
+            }
+            catch (OperationCanceledException) { }
 
             Console.WriteLine("Press any key to exit.");
             Console.ReadKey();

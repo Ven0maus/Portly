@@ -21,7 +21,12 @@ namespace Portly.Client
     public class PortlyClient : PortlyClientBase
     {
         /// <inheritdoc/>
-        public PortlyClient(ILogProvider? logProvider, bool noDelay = false) : base(logProvider: logProvider, noDelay: noDelay)
+        public PortlyClient(Func<IClientTransport>? clientTransport = null,
+            IPacketProtocol? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null) :
+            base(clientTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider)
         {
             Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
@@ -32,8 +37,7 @@ namespace Portly.Client
             string reason = string.Empty;
             if (packet.Payload.Length != 0)
                 reason = ((Packet<string>)packet).Payload;
-
-            await ((PortlyClient)client).DisconnectInternalAsync(false, reason);
+            await OnServerDisconnectedAsync(reason);
         }
     }
 }
