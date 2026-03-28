@@ -82,7 +82,7 @@ namespace Portly.Client
         {
             var packetSerializer = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
-            _packetProtocol = packetProtocol ?? new TcpPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), packetSerializer, logProvider: logProvider);
+            _packetProtocol = packetProtocol ?? new LengthPrefixedPacketProtocol(new Core.Configuration.Settings.ConnectionSettings(), packetSerializer, logProvider: logProvider);
             _noDelay = noDelay;
             LogProvider = logProvider;
         }

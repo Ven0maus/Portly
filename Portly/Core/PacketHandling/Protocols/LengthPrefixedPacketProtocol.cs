@@ -7,9 +7,9 @@ using System.Buffers.Binary;
 namespace Portly.Core.PacketHandling.Protocols
 {
     /// <summary>
-    /// Provides a default tcp implementation that uses MessagePack and AES encryption support.
+    /// Provides a length-prefixed implementation for a packet framing protocol.
     /// </summary>
-    public sealed class TcpPacketProtocol : IPacketProtocol
+    public sealed class LengthPrefixedPacketProtocol : IPacketProtocol
     {
         private Version? _version;
         /// <inheritdoc/>
@@ -30,7 +30,7 @@ namespace Portly.Core.PacketHandling.Protocols
         /// <param name="connectionSettings"></param>
         /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
-        public TcpPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
+        public LengthPrefixedPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
         {
             _idleTimeout = connectionSettings.IdleTimeoutSeconds;
             _writeTimeout = connectionSettings.WriteTimeoutSeconds;
