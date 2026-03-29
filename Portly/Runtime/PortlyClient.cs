@@ -48,7 +48,7 @@ namespace Portly.Runtime
 
         private Stream? _stream;
 
-        private readonly PacketRouter<IClient> _packetRouter = new();
+        private readonly PacketRouter<IClient> _packetRouter;
         private readonly IPacketProtocol _packetProtocol;
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
 
@@ -68,7 +68,7 @@ namespace Portly.Runtime
         /// <summary>
         /// Raised when a packet is received.
         /// </summary>
-        public event EventHandler<IPacket>? OnPacketReceived;
+        public event EventHandler<Packet>? OnPacketReceived;
         /// <summary>
         /// Raised when the client is connected to the server.
         /// </summary>
@@ -124,6 +124,7 @@ namespace Portly.Runtime
             _cts = new CancellationTokenSource();
 
             _logProvider = logProvider;
+            _packetRouter = new(logProvider);
 
             RegisterPredefinedRoutes();
         }
@@ -306,7 +307,7 @@ namespace Portly.Runtime
         }
 
         /// <inheritdoc/>
-        public async Task SendPacketAsync(IPacket packet, bool encrypt)
+        public async Task SendPacketAsync(Packet packet, bool encrypt)
         {
             if (!Connected)
                 throw new InvalidOperationException("Client is not connected.");
@@ -326,7 +327,7 @@ namespace Portly.Runtime
             }
         }
 
-        private async Task SendPacketInternalAsync(Stream stream, IPacket packet, bool encrypt)
+        private async Task SendPacketInternalAsync(Stream stream, Packet packet, bool encrypt)
         {
             await _sendLock.WaitAsync();
             try

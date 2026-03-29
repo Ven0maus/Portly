@@ -8,7 +8,7 @@ namespace Portly.Protocol
     /// Base packet implementation
     /// </summary>
     [MessagePackObject(AllowPrivate = true)]
-    public class Packet : IPacket
+    public class Packet
     {
         /// <summary>
         /// The unique identifier for this packet.

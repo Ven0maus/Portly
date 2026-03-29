@@ -26,7 +26,7 @@ namespace Portly.Abstractions
         /// <param name="encrypt"></param>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        Task SendPacketAsync(Stream stream, IPacket packet, bool encrypt, CancellationToken cancellationToken = default);
+        Task SendPacketAsync(Stream stream, Packet packet, bool encrypt, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Single packet receive implementation

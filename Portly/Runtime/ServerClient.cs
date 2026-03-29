@@ -35,7 +35,7 @@ namespace Portly.Runtime
 
         private readonly EventHandler<IServerClient>? _onDisconnect = onDisconnect;
 
-        public async Task SendPacketAsync(IPacket packet, bool encrypt, CancellationToken cancellationToken = default)
+        public async Task SendPacketAsync(Packet packet, bool encrypt, CancellationToken cancellationToken = default)
         {
             if (!Connection.IsConnected)
                 throw new InvalidOperationException("Client not connected.");

@@ -1,4 +1,6 @@
-﻿namespace Portly.Abstractions
+﻿using Portly.Protocol;
+
+namespace Portly.Abstractions
 {
     /// <summary>
     /// Serialization provider for packets
@@ -12,13 +14,13 @@
         /// <param name="data"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        byte[] Serialize<T>(T data, CancellationToken token = default) where T : IPacket;
+        byte[] Serialize<T>(T data, CancellationToken token = default) where T : Packet;
 
         /// <summary>
         /// Method to deserialize data from a string into a packet.
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        T Deserialize<T>(in ReadOnlyMemory<byte> bytes, CancellationToken token = default) where T : IPacket;
+        T Deserialize<T>(in ReadOnlyMemory<byte> bytes, CancellationToken token = default) where T : Packet;
     }
 }

@@ -1,6 +1,5 @@
 ﻿using MessagePack;
 using Portly.Abstractions;
-using Portly.Protocol;
 
 namespace Portly.Protocol.Serialization
 {
@@ -13,13 +12,13 @@ namespace Portly.Protocol.Serialization
             .WithSecurity(MessagePackSecurity.UntrustedData);
 
         /// <inheritdoc/>
-        public T Deserialize<T>(in ReadOnlyMemory<byte> bytes, CancellationToken token = default) where T : IPacket
+        public T Deserialize<T>(in ReadOnlyMemory<byte> bytes, CancellationToken token = default) where T : Packet
         {
             return MessagePackSerializer.Deserialize<T>(bytes, _messagePackSerializerOptions, cancellationToken: token);
         }
 
         /// <inheritdoc/>
-        public byte[] Serialize<T>(T data, CancellationToken token = default) where T : IPacket
+        public byte[] Serialize<T>(T data, CancellationToken token = default) where T : Packet
         {
             // Default provider serializes to Packet type for message packet
             if (data is Packet)

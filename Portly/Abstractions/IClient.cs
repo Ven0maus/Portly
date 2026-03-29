@@ -1,4 +1,6 @@
-﻿namespace Portly.Abstractions
+﻿using Portly.Protocol;
+
+namespace Portly.Abstractions
 {
     /// <summary>
     /// Represents the client-side data object
@@ -19,7 +21,7 @@
         /// <param name="packet"></param>
         /// <param name="encrypt"></param>
         /// <returns></returns>
-        Task SendPacketAsync(IPacket packet, bool encrypt);
+        Task SendPacketAsync(Packet packet, bool encrypt);
 
         /// <summary>
         /// Disconnects asynchronously from the connected server.

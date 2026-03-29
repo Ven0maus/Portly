@@ -229,7 +229,7 @@ namespace Portly.Protocol.Processing
         }
 
         /// <inheritdoc/>
-        public async Task SendPacketAsync(Stream stream, IPacket packet, bool encrypted, CancellationToken cancellationToken = default)
+        public async Task SendPacketAsync(Stream stream, Packet packet, bool encrypted, CancellationToken cancellationToken = default)
         {
             if (packet == null || packet.Identifier.Id == (int)PacketType.KeepAlive)
             {

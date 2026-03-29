@@ -41,7 +41,7 @@ namespace Portly.Runtime
         private readonly ConcurrentDictionary<IPAddress, int> _connectionsPerIp = new();
         private static readonly HashSet<int> _systemPacketIds = [.. Enum.GetValues<PacketType>().Select(a => (int)a)];
         private static readonly int _highestSystemPacketId = _systemPacketIds.Max();
-        private readonly PacketRouter<IServerClient> _packetRouter = new();
+        private readonly PacketRouter<IServerClient> _packetRouter;
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
         private readonly IPacketSerializationProvider _packetSerializationProvider;
@@ -94,6 +94,8 @@ namespace Portly.Runtime
             ILogProvider? logProvider = null)
         {
             _logProvider = logProvider;
+            _packetRouter = new(logProvider);
+
             Configuration = ServerConfiguration.Load(logProvider: _logProvider);
             Configuration.Validate();
 
@@ -219,7 +221,7 @@ namespace Portly.Runtime
         /// <param name="packet"></param>
         /// <param name="encrypt"></param>
         /// <returns></returns>
-        public async Task SendToClientsAsync(IPacket packet, bool encrypt)
+        public async Task SendToClientsAsync(Packet packet, bool encrypt)
         {
             if (IsSystemPacket(packet))
                 throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
@@ -253,7 +255,7 @@ namespace Portly.Runtime
         /// <param name="encrypt"></param>
         /// <returns></returns>
         /// <exception cref="KeyNotFoundException"></exception>
-        public async Task SendToClientAsync(IServerClient serverClient, IPacket packet, bool encrypt)
+        public async Task SendToClientAsync(IServerClient serverClient, Packet packet, bool encrypt)
         {
             if (IsSystemPacket(packet))
                 throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
@@ -579,7 +581,7 @@ namespace Portly.Runtime
             OnPacketReceived?.Invoke(connection, packet);
         }
 
-        private static bool IsSystemPacket(IPacket packet)
+        private static bool IsSystemPacket(Packet packet)
             => _systemPacketIds.Contains(packet.Identifier.Id);
     }
 }
