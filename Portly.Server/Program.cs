@@ -10,7 +10,7 @@ namespace Portly.Server
         private static async Task Main()
         {
             // Run server in background
-            var serverTask = Task.Run(() => _server.StartAsync());
+            var serverTask = _server.StartAsync();
 
             Console.WriteLine("Write shutdown to stop the server.");
 
@@ -33,9 +33,22 @@ namespace Portly.Server
             Console.ReadKey();
         }
 
-        public enum PacketTypes
+        private static void Write(string message, ConsoleColor? color = null)
         {
-            HelloWorld = 101
+            color ??= Console.ForegroundColor;
+            var prev = Console.ForegroundColor;
+            Console.ForegroundColor = color.Value;
+            Console.Write(message);
+            Console.ForegroundColor = prev;
+        }
+
+        private static void WriteLine(string message, ConsoleColor? color = null)
+        {
+            color ??= Console.ForegroundColor;
+            var prev = Console.ForegroundColor;
+            Console.ForegroundColor = color.Value;
+            Console.WriteLine(message);
+            Console.ForegroundColor = prev;
         }
     }
 }
