@@ -1,6 +1,5 @@
 ﻿using MessagePack;
 using Portly.Core.Interfaces;
-using Portly.Core.Networking;
 using Portly.PacketHandling;
 
 namespace Portly.Core.PacketHandling
@@ -38,34 +37,12 @@ namespace Portly.Core.PacketHandling
             }
         }
 
-        /// <summary>
-        /// The nonce of the packet.
-        /// </summary>
-        [Key(3)]
-        public string? Nonce { get; init; }
-
-        /// <summary>
-        /// The timestamp the packet was created in UTC.
-        /// </summary>
-        [Key(4)]
-        public DateTime? CreationTimestampUtc { get; init; }
-
         [SerializationConstructor]
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted, string? nonce = null, DateTime? creationTimestampUtc = null)
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
         {
             Identifier = identifier;
             Payload = payload;
             Encrypted = encrypted;
-
-            if (nonce == null || creationTimestampUtc == null)
-            {
-                (Nonce, CreationTimestampUtc) = ReplayProtection.CreateNonceWithTimestamp();
-            }
-            else
-            {
-                Nonce = nonce;
-                CreationTimestampUtc = creationTimestampUtc;
-            }
         }
 
         /// <summary>
@@ -73,7 +50,7 @@ namespace Portly.Core.PacketHandling
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public Packet<T> As<T>() => new(Identifier, Payload, Encrypted, Nonce, CreationTimestampUtc);
+        public Packet<T> As<T>() => new(Identifier, Payload, Encrypted);
 
         /// <summary>
         /// Creates a packet of the specified type, any MessagePack supported object can be used.
@@ -128,8 +105,8 @@ namespace Portly.Core.PacketHandling
         [IgnoreMember]
         public new T Payload => _payloadObj ??= MessagePackSerializer.Deserialize<T>(base.Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted, string? nonce, DateTime? creationTimestampUtc)
-            : base(identifier, payload, encrypted, nonce, creationTimestampUtc)
+        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
+            : base(identifier, payload, encrypted)
         { }
 
         /// <summary>
@@ -147,7 +124,7 @@ namespace Portly.Core.PacketHandling
                     MessagePackSerializer.Serialize(payload,
                         MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-                return new Packet<T>(identifier, serializedPayload, false, null, null)
+                return new Packet<T>(identifier, serializedPayload, false)
                 {
                     _payloadObj = payload,
                 };

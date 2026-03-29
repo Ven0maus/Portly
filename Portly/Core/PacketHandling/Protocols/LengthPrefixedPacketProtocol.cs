@@ -1,5 +1,7 @@
-﻿using Portly.Core.Configuration.Settings;
+﻿using Portly.Core.Configuration;
 using Portly.Core.Interfaces;
+using Portly.Core.Networking;
+using Portly.Core.Serialization;
 using Portly.Core.Utilities.Logging;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -22,21 +24,26 @@ namespace Portly.Core.PacketHandling.Protocols
         private readonly ILogProvider? _logProvider;
         private readonly IPacketSerializationProvider _packetSerializer;
 
+        private readonly ReplayProtection _replayProtection;
+
         private IEncryptionProvider? _encryptionProvider;
 
         /// <summary>
         /// Constructor
         /// </summary>
-        /// <param name="connectionSettings"></param>
+        /// <param name="serverConfiguration"></param>
         /// <param name="packetSerializationProvider"></param>
         /// <param name="logProvider"></param>
-        public LengthPrefixedPacketProtocol(ConnectionSettings connectionSettings, IPacketSerializationProvider packetSerializationProvider, ILogProvider? logProvider = null)
+        public LengthPrefixedPacketProtocol(ServerConfiguration serverConfiguration,
+            IPacketSerializationProvider packetSerializationProvider,
+            ILogProvider? logProvider = null)
         {
-            _idleTimeout = connectionSettings.IdleTimeoutSeconds;
-            _writeTimeout = connectionSettings.WriteTimeoutSeconds;
-            _maxPacketSize = connectionSettings.MaxRequestSizeBytes;
+            _idleTimeout = serverConfiguration.ConnectionSettings.IdleTimeoutSeconds;
+            _writeTimeout = serverConfiguration.ConnectionSettings.WriteTimeoutSeconds;
+            _maxPacketSize = serverConfiguration.ConnectionSettings.MaxRequestSizeBytes;
             _logProvider = logProvider;
             _packetSerializer = packetSerializationProvider;
+            _replayProtection = new ReplayProtection(TimeSpan.FromMinutes(serverConfiguration.RateLimits.RequestsValidForMaxMinutes));
         }
 
         /// <inheritdoc/>
@@ -93,32 +100,44 @@ namespace Portly.Core.PacketHandling.Protocols
                             offset += read;
                         }
 
+                        TransportPacket transportPacket;
                         try
                         {
-                            packet = _packetSerializer.Deserialize<Packet>(dataBuffer.AsMemory(0, packetLength), cancellationToken);
+                            transportPacket = TransportPacketSerializer.Deserialize(dataBuffer.AsMemory(0, packetLength), cancellationToken);
                         }
                         catch (Exception ex)
                         {
-                            throw new IOException("Failed to deserialize packet: " + ex.Message);
+                            throw new IOException("Failed to deserialize transport packet: " + ex.Message, ex);
                         }
 
-                        if (packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake)
-                            clearDataBufferAfterUse = true;
+                        // Validate internal transport metadata
+                        if (!_replayProtection.ValidateRequest(transportPacket.Nonce, transportPacket.CreationTimestampUtc))
+                            throw new Exception("Invalid or replayed packet received.");
+
+                        try
+                        {
+                            packet = _packetSerializer.Deserialize<Packet>(transportPacket.Payload, cancellationToken);
+                            clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new IOException("Failed to deserialize packet: " + ex.Message, ex);
+                        }
+
+                        try
+                        {
+                            if (packet.Encrypted)
+                                packet.Decrypt(_encryptionProvider);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
+                        }
                     }
                     finally
                     {
                         ArrayPool<byte>.Shared.Return(dataBuffer, clearDataBufferAfterUse);
                     }
-                }
-
-                try
-                {
-                    if (packet.Encrypted)
-                        packet.Decrypt(_encryptionProvider);
-                }
-                catch (Exception ex)
-                {
-                    throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
                 }
 
                 _logProvider?.Log(packetLength == 0 ? "Received KeepAlive packet." : $"Received packet of length {packetLength}.", LogLevel.Debug);
@@ -164,10 +183,24 @@ namespace Portly.Core.PacketHandling.Protocols
                     offset += r;
                 }
 
-                IPacket packet;
+                TransportPacket transportPacket;
                 try
                 {
-                    packet = _packetSerializer.Deserialize<Packet>(buffer.AsMemory(0, packetLength), cancellationToken);
+                    transportPacket = TransportPacketSerializer.Deserialize(buffer.AsMemory(0, packetLength), cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    throw new IOException("Failed to deserialize transport packet: " + ex.Message, ex);
+                }
+
+                // Validate internal transport metadata
+                if (!_replayProtection.ValidateRequest(transportPacket.Nonce, transportPacket.CreationTimestampUtc))
+                    throw new Exception("Invalid or replayed packet received.");
+
+                Packet packet;
+                try
+                {
+                    packet = _packetSerializer.Deserialize<Packet>(transportPacket.Payload, cancellationToken);
                     clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
                 }
                 catch (Exception ex)
@@ -217,26 +250,35 @@ namespace Portly.Core.PacketHandling.Protocols
                 throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
             }
 
-            byte[] payload = _packetSerializer.Serialize(packet, cancellationToken);
+            byte[] packetPayload = _packetSerializer.Serialize(packet, cancellationToken);
 
-            if (payload.Length > _maxPacketSize)
-                throw new InvalidOperationException($"Packet too large: {payload.Length}");
+            var (nonce, datetime) = ReplayProtection.CreateNonceWithTimestamp();
+            var transportPacket = new TransportPacket
+            {
+                Payload = packetPayload,
+                Nonce = nonce,
+                CreationTimestampUtc = datetime
+            };
 
-            _logProvider?.Log($"Sending packet of size {payload.Length}.", LogLevel.Debug);
+            var transportPayload = TransportPacketSerializer.Serialize(transportPacket, cancellationToken);
+            if (transportPayload.Length > _maxPacketSize)
+                throw new InvalidOperationException($"Packet too large: {transportPayload.Length}");
 
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + payload.Length);
+            _logProvider?.Log($"Sending packet of size {transportPayload.Length}.", LogLevel.Debug);
+
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(4 + transportPayload.Length);
 
             try
             {
                 var span = buffer.AsSpan();
 
-                BinaryPrimitives.WriteInt32BigEndian(span.Slice(0, 4), payload.Length);
-                payload.CopyTo(span.Slice(4));
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(0, 4), transportPayload.Length);
+                transportPayload.CopyTo(span.Slice(4));
 
                 // Use a cancellation token if a write timeout is specified
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_writeTimeout));
 
-                await stream.WriteAsync(buffer.AsMemory(0, 4 + payload.Length), cts.Token);
+                await stream.WriteAsync(buffer.AsMemory(0, 4 + transportPayload.Length), cts.Token);
             }
             catch (OperationCanceledException)
             {

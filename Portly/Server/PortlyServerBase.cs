@@ -32,7 +32,6 @@ namespace Portly.Server
         private readonly PacketRouter<IServerClient> _packetRouter = new();
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
-        private readonly ReplayProtection _replayProtection;
         private readonly IPacketSerializationProvider _packetSerializationProvider;
         private readonly Func<IPacketProtocol> _packetProtocol;
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
@@ -88,7 +87,7 @@ namespace Portly.Server
 
             _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
-            _packetProtocol = packetProtocol ?? (() => new LengthPrefixedPacketProtocol(Configuration.ConnectionSettings, _packetSerializationProvider, _logProvider));
+            _packetProtocol = packetProtocol ?? (() => new LengthPrefixedPacketProtocol(Configuration, _packetSerializationProvider, _logProvider));
 
             var ipToUse = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
@@ -101,7 +100,6 @@ namespace Portly.Server
             _trustServer = new TrustServer();
             _cts = new();
 
-            _replayProtection = new(TimeSpan.FromMinutes(Configuration.RateLimits.RequestsValidForMaxMinutes));
             _keepAliveManager = new(
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveIntervalSeconds),
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveTimeoutSeconds),
@@ -346,7 +344,7 @@ namespace Portly.Server
                     catch (OperationCanceledException) { }
                     catch (Exception ex)
                     {
-                        _logProvider?.Log($"[{connection.Id}]: Error: {ex.Message}", LogLevel.Error);
+                        _logProvider?.Log($"[{connection.Id}]: {ex.Message}", LogLevel.Error);
                     }
                     finally
                     {
@@ -439,9 +437,6 @@ namespace Portly.Server
             // Protocol + version check
             var liteHandshake = ((Packet)packet).As<LiteHandshake>();
             var liteHandshakePayload = liteHandshake.Payload;
-
-            if (!_replayProtection.ValidateRequest(liteHandshake.Nonce, liteHandshake.CreationTimestampUtc))
-                return (false, "Invalid or replayed handshake (nonce/timestamp).");
 
             var protocol = Encoding.UTF8.GetString(liteHandshakePayload.Protocol);
             if (protocol != connection.PacketProtocol.GetType().Name)
@@ -542,13 +537,6 @@ namespace Portly.Server
 
         private async Task HandlePacketAsync(ServerClient connection, IPacket packet)
         {
-            if (!_replayProtection.ValidateRequest(packet.Nonce, packet.CreationTimestampUtc))
-            {
-                // TODO: Determine if this client is too suspicious (many replays attempted, and disconnect it)
-                _logProvider?.Log($"[{connection.Id}]: invalid nonce/timestamp, potential replay attack.", LogLevel.Warning);
-                return;
-            }
-
             // Rate limit non-system packets
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
             {

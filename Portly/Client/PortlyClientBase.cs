@@ -107,7 +107,7 @@ namespace Portly.Client
 
             _packetProtocol = packetProtocol ??
                 new LengthPrefixedPacketProtocol(
-                    new Core.Configuration.Settings.ConnectionSettings(),
+                    new Core.Configuration.ServerConfiguration(),
                     packetSerializer,
                     logProvider: logProvider);
 
