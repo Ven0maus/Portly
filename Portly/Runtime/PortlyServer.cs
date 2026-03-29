@@ -129,6 +129,7 @@ namespace Portly.Runtime
 
         /// <summary>
         /// Starts the server asynchronously.
+        /// <br>Note: This task runs for as long as the server is running.</br>
         /// </summary>
         /// <returns></returns>
         public Task StartAsync()
