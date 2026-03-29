@@ -392,7 +392,7 @@ namespace Portly.Runtime
             if (result == null || result.Identifier.Id != (int)PacketType.LiteHandshake || result.Payload == null)
                 throw new Exception("Invalid lite handshake packet.");
 
-            var payload = ((Packet)result).As<string>().Payload;
+            var payload = result.As<string>().Payload;
 
             if (payload != "OK")
                 throw new Exception(payload ?? "Invalid lite handshake response.");
@@ -431,7 +431,7 @@ namespace Portly.Runtime
             if (responsePacket == null || responsePacket.Identifier.Id != (int)PacketType.SecureHandshake || responsePacket.Payload == null)
                 throw new Exception("Invalid handshake response.");
 
-            var response = ((Packet)responsePacket).As<ServerHandshake>();
+            var response = responsePacket.As<ServerHandshake>();
 
             if (response.Payload.ServerEphemeralKey.Length == 0)
                 throw new Exception("Invalid server key.");
