@@ -1,6 +1,6 @@
-﻿using Portly.Core.Interfaces;
+﻿using Portly.Core.PacketHandling;
 
-namespace Portly.Core.PacketHandling
+namespace Portly.Core.Interfaces
 {
     /// <summary>
     /// Basic packet protocol structure
