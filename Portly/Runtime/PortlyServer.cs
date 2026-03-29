@@ -139,14 +139,9 @@ namespace Portly.Runtime
                 return Task.CompletedTask;
             };
 
-            var serverTask = Task.Run(async () =>
-            {
-                _ = _keepAliveManager.StartAsync(_cts.Token);
-                _logProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
-                await _serverTransport.StartAsync(_cts.Token);
-            });
-
-            return serverTask;
+            _ = _keepAliveManager.StartAsync(_cts.Token);
+            _logProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
+            return _serverTransport.StartAsync(_cts.Token);
         }
 
         /// <summary>

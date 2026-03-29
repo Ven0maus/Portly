@@ -56,7 +56,7 @@ namespace Portly.Client
             else if (command.StartsWith("/connect", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = command.Split(' ');
-                if (parts.Length != 3)
+                if (parts.Length == 3)
                 {
                     if (!int.TryParse(parts[2], out var port))
                     {
