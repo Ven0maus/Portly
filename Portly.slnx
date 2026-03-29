@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="Portly.Client/Portly.Client.csproj" />
+  <Project Path="Portly.ExampleClient/Portly.ExampleClient.csproj" />
+  <Project Path="Portly.ExampleServer/Portly.ExampleServer.csproj" />
   <Project Path="Portly/Portly.csproj" />
-  <Project Path="Portly.Server/Portly.Server.csproj" />
 </Solution>

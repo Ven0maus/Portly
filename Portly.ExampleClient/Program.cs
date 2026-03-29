@@ -1,34 +1,36 @@
 ﻿using Portly.Infrastructure.Logging;
 using Portly.Runtime;
 
-namespace Portly.Server
+namespace Portly.ExampleClient
 {
     internal class Program
     {
-        private static readonly PortlyServer _server = new(logProvider: LogProviderBase.Default);
-
-        private static Task? _serverTask;
+        private static readonly PortlyClient _client = new(logProvider: LogProviderBase.Default);
 
         private static async Task Main()
         {
-            await HandleCommand("/clear");
+            // Setup client events
+            _client.OnConnected += OnConnected;
+            _client.OnDisconnected += OnDisconnected;
 
+            await HandleCommand("/clear");
             Write("Input: ");
             var input = Console.ReadLine();
 
+            // Main loop
             while (true)
             {
+                // Break while loop when input is exit
                 if (input != null && input.Equals("exit", StringComparison.OrdinalIgnoreCase))
                     break;
 
+                // Handle input command
                 await HandleCommand(input);
 
+                // Read next input command
                 Write("Input: ");
                 input = Console.ReadLine();
             }
-
-            // Ensure server is stopped before exit
-            await StopServerIfRunning();
         }
 
         private static async Task HandleCommand(string? command)
@@ -38,76 +40,60 @@ namespace Portly.Server
             if (command.Equals("/help", StringComparison.OrdinalIgnoreCase))
             {
                 WriteLine("Available commands:");
-                Write(true, ("/start ", ConsoleColor.Cyan), (": Starts the server.", null));
-                Write(true, ("/stop ", ConsoleColor.Cyan), (": Stops the server.", null));
-                Write(true, ("/status ", ConsoleColor.Cyan), (": Shows server status.", null));
+                Write(true, ("/connect ", ConsoleColor.Cyan), ("<ip> <port> ", ConsoleColor.Yellow), (": Connects to the specified server.", null));
+                Write(true, ("/disconnect ", ConsoleColor.Cyan), (": Disconnects from the connected server.", null));
                 Write(true, ("/clear ", ConsoleColor.Cyan), (": Clears the console.", null));
-                Write(true, ("/help ", ConsoleColor.Cyan), (": Shows this help.", null));
+                Write(true, ("/help ", ConsoleColor.Cyan), (": Shows a list of useable commands.", null));
             }
             else if (command.Equals("/clear", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Clear();
-                WriteLine("Welcome to the server terminal.");
+                WriteLine("Welcome to the client terminal.");
                 Write("Type ");
                 Write("/help ", ConsoleColor.Cyan);
                 WriteLine("for more information.");
             }
-            else if (command.Equals("/start", StringComparison.OrdinalIgnoreCase))
+            else if (command.StartsWith("/connect", StringComparison.OrdinalIgnoreCase))
             {
-                if (_serverTask != null)
+                var parts = command.Split(' ');
+                if (parts.Length == 3)
                 {
-                    WriteLine("Server is already running.", ConsoleColor.Yellow);
-                    return;
-                }
+                    if (!int.TryParse(parts[2], out var port))
+                    {
+                        WriteLine($"Invalid port \"{parts[2]}\".", ConsoleColor.Red);
+                        return;
+                    }
 
-                try
-                {
-                    WriteLine($"Starting server...");
-                    _serverTask = _server.StartAsync();
+                    try
+                    {
+                        WriteLine($"Attempting to connect to {parts[1]}:{port}");
+                        await _client.ConnectAsync(parts[1], port);
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLine("Unable to connect: " + ex.Message, ConsoleColor.Red);
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    WriteLine("Failed to start server: " + ex.Message, ConsoleColor.Red);
-                    _serverTask = null;
+                    WriteLine("Invalid connect statement, use as /connect <ip> <port>", ConsoleColor.Red);
                 }
             }
-            else if (command.Equals("/stop", StringComparison.OrdinalIgnoreCase))
+            else if (command.Equals("/disconnect", StringComparison.OrdinalIgnoreCase))
             {
-                if (_serverTask == null)
-                {
-                    WriteLine("Server is not running.", ConsoleColor.Yellow);
-                    return;
-                }
-
-                await StopServerIfRunning();
-            }
-            else if (command.Equals("/status", StringComparison.OrdinalIgnoreCase))
-            {
-                WriteLine(_serverTask == null ? "Server is stopped." : "Server is running.");
+                await _client.DisconnectAsync();
             }
         }
 
-        private static async Task StopServerIfRunning()
+        private static void OnDisconnected(object? sender, EventArgs e)
         {
-            if (_serverTask == null)
-                return;
-
-            try
-            {
-                WriteLine("Stopping server...");
-                await _server.StopAsync();
-                await _serverTask;
-            }
-            catch (OperationCanceledException) { }
-            finally
-            {
-                _serverTask = null;
-            }
-
-            WriteLine("Server stopped.");
+            WriteLine("Disconnected.", ConsoleColor.White);
         }
 
-        // === Same console helpers as client ===
+        private static void OnConnected(object? sender, EventArgs e)
+        {
+            WriteLine("Connected.", ConsoleColor.White);
+        }
 
         private static void Write(bool newLineAtEnd = false, params (string message, ConsoleColor? color)[] values)
         {
