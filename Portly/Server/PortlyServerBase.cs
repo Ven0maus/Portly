@@ -29,6 +29,7 @@ namespace Portly.Server
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
         private readonly ConcurrentDictionary<IPAddress, int> _connectionsPerIp = new();
         private static readonly HashSet<int> _systemPacketIds = [.. Enum.GetValues<PacketType>().Select(a => (int)a)];
+        private static readonly int _highestSystemPacketId = _systemPacketIds.Max();
         private readonly PacketRouter<IServerClient> _packetRouter = new();
 
         private readonly KeepAliveManager<ServerClient> _keepAliveManager;
@@ -51,7 +52,7 @@ namespace Portly.Server
         /// <summary>
         /// Raised when a packet is received from a client.
         /// </summary>
-        public event EventHandler<IServerClient, IPacket>? OnPacketReceived;
+        public event EventHandler<IServerClient, Packet>? OnPacketReceived;
         /// <summary>
         /// Raised when a client is connected to the server after the handshake is succesful.
         /// </summary>
@@ -200,6 +201,9 @@ namespace Portly.Server
         /// <returns></returns>
         public async Task SendToClientsAsync(IPacket packet, bool encrypt)
         {
+            if (IsSystemPacket(packet))
+                throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
+
             var tasks = _clients.Values.ToArray()
                 .Select(async client =>
                 {
@@ -224,17 +228,20 @@ namespace Portly.Server
         /// <summary>
         /// Sends a packet to the specified client.
         /// </summary>
-        /// <param name="clientId"></param>
+        /// <param name="serverClient"></param>
         /// <param name="packet"></param>
         /// <param name="encrypt"></param>
         /// <returns></returns>
         /// <exception cref="KeyNotFoundException"></exception>
-        public async Task SendToClientAsync(Guid clientId, IPacket packet, bool encrypt)
+        public async Task SendToClientAsync(IServerClient serverClient, IPacket packet, bool encrypt)
         {
-            if (_clients.TryGetValue(clientId, out var client))
+            if (IsSystemPacket(packet))
+                throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
+
+            if (_clients.TryGetValue(serverClient.Id, out var client))
                 await client.SendPacketAsync(packet, encrypt);
             else
-                _logProvider?.Log($"[{clientId}]: Failed to send packet, not connected.", LogLevel.Warning);
+                _logProvider?.Log($"[{serverClient.Id}]: Failed to send packet, not connected.", LogLevel.Warning);
         }
 
         private void OnClientDisconnectedImpl(object? sender, IServerClient connection)
@@ -414,7 +421,7 @@ namespace Portly.Server
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Configuration.ConnectionSettings.ConnectTimeoutSeconds));
 
-            IPacket? packet;
+            Packet? packet;
             try
             {
                 packet = await connection.PacketProtocol.ReceiveSinglePacketAsync(
@@ -435,7 +442,7 @@ namespace Portly.Server
                 return (false, null);
 
             // Protocol + version check
-            var liteHandshake = ((Packet)packet).As<LiteHandshake>();
+            var liteHandshake = packet.As<LiteHandshake>();
             var liteHandshakePayload = liteHandshake.Payload;
 
             var protocol = Encoding.UTF8.GetString(liteHandshakePayload.Protocol);
@@ -480,7 +487,7 @@ namespace Portly.Server
             // 2. Receive client handshake
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Configuration.ConnectionSettings.ConnectTimeoutSeconds));
 
-            IPacket? requestPacket;
+            Packet? requestPacket;
             try
             {
                 requestPacket = await connection.PacketProtocol.ReceiveSinglePacketAsync(
@@ -496,7 +503,7 @@ namespace Portly.Server
             if (requestPacket == null || requestPacket.Identifier.Id != (int)PacketType.SecureHandshake || requestPacket.Payload == null)
                 return false;
 
-            var request = ((Packet)requestPacket).As<ClientHandshake>();
+            var request = requestPacket.As<ClientHandshake>();
 
             if (request.Payload.Challenge == null || request.Payload.Challenge.Length == 0 ||
                 request.Payload.ClientEphemeralKey == null || request.Payload.ClientEphemeralKey.Length == 0)
@@ -535,7 +542,7 @@ namespace Portly.Server
             return true;
         }
 
-        private async Task HandlePacketAsync(ServerClient connection, IPacket packet)
+        private async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
             // Rate limit non-system packets
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))

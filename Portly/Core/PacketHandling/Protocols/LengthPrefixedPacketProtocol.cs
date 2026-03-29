@@ -18,7 +18,7 @@ namespace Portly.Core.PacketHandling.Protocols
         public Version Version => _version ??= new Version(1, 0, 0);
 
         private static readonly byte[] _emptyPacketPayload = new byte[4]; // 0-length prefix
-        private static readonly IPacket _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>());
+        private static readonly Packet _KeepAlivePacket = Packet.Create(PacketType.KeepAlive, Array.Empty<byte>());
 
         private readonly int _idleTimeout, _writeTimeout, _maxPacketSize;
         private readonly ILogProvider? _logProvider;
@@ -53,7 +53,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task ReadPacketsAsync(Stream stream, Func<IPacket, Task> onPacket, CancellationToken cancellationToken = default)
+        public async Task ReadPacketsAsync(Stream stream, Func<Packet, Task> onPacket, CancellationToken cancellationToken = default)
         {
             var lengthBuffer = new byte[4];
 
@@ -78,7 +78,7 @@ namespace Portly.Core.PacketHandling.Protocols
                 if (packetLength < 0) throw new IOException("Invalid packet length");
                 if (packetLength > _maxPacketSize) throw new IOException($"Packet too large: {packetLength} bytes");
 
-                IPacket packet;
+                Packet packet;
                 if (packetLength == 0)
                 {
                     // Zero-length packet - KeepAlive packet
@@ -147,7 +147,7 @@ namespace Portly.Core.PacketHandling.Protocols
         }
 
         /// <inheritdoc/>
-        public async Task<IPacket> ReceiveSinglePacketAsync(Stream stream, CancellationToken cancellationToken = default)
+        public async Task<Packet> ReceiveSinglePacketAsync(Stream stream, CancellationToken cancellationToken = default)
         {
             byte[] lengthBuffer = new byte[4];
 
