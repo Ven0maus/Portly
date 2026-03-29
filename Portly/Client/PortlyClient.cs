@@ -1,11 +1,10 @@
 ﻿using Portly.Core.Authentication.Handshake;
 using Portly.Core.Interfaces;
-using Portly.Core.PacketHandling;
 
 namespace Portly.Client
 {
     /// <summary>
-    /// Represents a TCP-based client responsible for connecting to a server,
+    /// Represents a client responsible for connecting to a server,
     /// performing a Trust-On-First-Use (TOFU) handshake, and sending/receiving packets.
     ///
     /// The client establishes a connection to a remote server, verifies its identity
@@ -15,8 +14,7 @@ namespace Portly.Client
     /// After a successful handshake, it continuously listens for incoming packets
     /// using <see cref="IPacketProtocol"/> and allows sending packets over the connection.
     ///
-    /// This implementation does not include encryption but ensures server identity
-    /// verification as a foundation for secure communication.
+    /// This implementation ensures server identity verification as a foundation for secure communication.
     /// </summary>
     public class PortlyClient : PortlyClientBase
     {
@@ -27,17 +25,6 @@ namespace Portly.Client
             Func<byte[], IEncryptionProvider>? encryptionProvider = null,
             ILogProvider? logProvider = null) :
             base(clientTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider)
-        {
-            Router.Register(PacketType.KeepAlive, null);
-            Router.Register(PacketType.Disconnect, HandleDisconnectPacket);
-        }
-
-        private async Task HandleDisconnectPacket(IClient client, IPacket packet)
-        {
-            string reason = string.Empty;
-            if (packet.Payload.Length != 0)
-                reason = ((Packet<string>)packet).Payload;
-            await OnServerDisconnectedAsync(reason);
-        }
+        { }
     }
 }

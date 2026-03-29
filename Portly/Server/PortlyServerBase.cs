@@ -106,6 +106,14 @@ namespace Portly.Server
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveTimeoutSeconds),
                 async (serverClient) => await serverClient.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>()), false, _cts.Token),
                 async (serverClient) => await serverClient.DisconnectInternalAsync());
+
+            RegisterPredefinedRoutes();
+        }
+
+        private void RegisterPredefinedRoutes()
+        {
+            Router.Register(PacketType.KeepAlive, null);
+            Router.Register(PacketType.Disconnect, async (client, packet) => await client.DisconnectAsync(informClient: false));
         }
 
         /// <summary>

@@ -116,6 +116,20 @@ namespace Portly.Client
             _cts = new CancellationTokenSource();
 
             _logProvider = logProvider;
+
+            RegisterPredefinedRoutes();
+        }
+
+        private void RegisterPredefinedRoutes()
+        {
+            Router.Register(PacketType.KeepAlive, null);
+            Router.Register(PacketType.Disconnect, async (client, packet) =>
+            {
+                string reason = string.Empty;
+                if (packet.Payload.Length != 0)
+                    reason = ((Packet<string>)packet).Payload;
+                await OnServerDisconnectedAsync(reason);
+            });
         }
 
         /// <inheritdoc/>
