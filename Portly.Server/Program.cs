@@ -12,11 +12,11 @@ namespace Portly.Server
             // Run server in background
             var serverTask = _server.StartAsync();
 
-            Console.WriteLine("Write shutdown to stop the server.");
+            Console.WriteLine("Write exit to stop the server.");
 
             string? input;
             while ((input = Console.ReadLine()) == null ||
-                   !input.Equals("shutdown", StringComparison.OrdinalIgnoreCase))
+                   !input.Equals("exit", StringComparison.OrdinalIgnoreCase))
             {
             }
 
@@ -31,24 +31,6 @@ namespace Portly.Server
 
             Console.WriteLine("Press any key to exit.");
             Console.ReadKey();
-        }
-
-        private static void Write(string message, ConsoleColor? color = null)
-        {
-            color ??= Console.ForegroundColor;
-            var prev = Console.ForegroundColor;
-            Console.ForegroundColor = color.Value;
-            Console.Write(message);
-            Console.ForegroundColor = prev;
-        }
-
-        private static void WriteLine(string message, ConsoleColor? color = null)
-        {
-            color ??= Console.ForegroundColor;
-            var prev = Console.ForegroundColor;
-            Console.ForegroundColor = color.Value;
-            Console.WriteLine(message);
-            Console.ForegroundColor = prev;
         }
     }
 }
