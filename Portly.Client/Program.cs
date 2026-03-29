@@ -1,5 +1,6 @@
-﻿using Portly.Core.Configuration.Settings;
-using Portly.Core.Utilities.Logging;
+﻿using Portly.Infrastructure.Configuration.Settings;
+using Portly.Infrastructure.Logging;
+using Portly.Runtime;
 
 namespace Portly.Client
 {
