@@ -13,15 +13,40 @@ namespace Portly.Infrastructure.Logging
     /// Initializes a new instance of the <see cref="CompositeLogger"/> class
     /// with the specified log providers.
     /// </remarks>
-    /// <param name="providers">
-    /// The log providers to which all log messages will be forwarded.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="providers"/> is <c>null</c>.
-    /// </exception>
-    public class CompositeLogger(params LogProviderBase[] providers) : ILogProvider
+    public class CompositeLogger : ILogProvider
     {
-        private readonly ILogProvider[] _providers = providers ?? throw new ArgumentNullException(nameof(providers));
+        /// <summary>
+        /// All log providers contained within this composite.
+        /// </summary>
+        public readonly List<ILogProvider> Providers = [];
+
+        /// <inheritdoc />
+        public IReadOnlySet<LogLevel> TrackedLogLevels => Providers
+            .SelectMany(a => a.TrackedLogLevels)
+            .ToHashSet();
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="providers"></param>
+        public CompositeLogger(params LogProviderBase[] providers)
+        {
+            Providers.AddRange(providers);
+        }
+
+        /// <inheritdoc />
+        public void Disable(params LogLevel[] logLevels)
+        {
+            foreach (var provider in Providers)
+                provider.Disable(logLevels);
+        }
+
+        /// <inheritdoc />
+        public void Enable(params LogLevel[] logLevels)
+        {
+            foreach (var provider in Providers)
+                provider.Enable(logLevels);
+        }
 
         /// <summary>
         /// Writes a log message to all configured log providers.
@@ -32,7 +57,7 @@ namespace Portly.Infrastructure.Logging
         /// </param>
         public void Log(string message, LogLevel logLevel = LogLevel.Info)
         {
-            foreach (var p in _providers)
+            foreach (var p in Providers)
                 p.Log(message, logLevel);
         }
     }

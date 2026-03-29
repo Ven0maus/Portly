@@ -7,15 +7,15 @@ namespace Portly.Infrastructure.Logging
     /// </summary>
     public abstract class LogProviderBase : ILogProvider
     {
-        /// <summary>
-        /// Contains all currently active logging levels.
-        /// </summary>
-        protected readonly HashSet<LogLevel> LogLevels = [];
+        private readonly HashSet<LogLevel> _logLevels = [];
+
+        /// <inheritdoc />
+        public IReadOnlySet<LogLevel> TrackedLogLevels => _logLevels;
 
         /// <inheritdoc/>
         public virtual void Log(string message, LogLevel logLevel = LogLevel.Info)
         {
-            if (LogLevels.Contains(logLevel))
+            if (_logLevels.Contains(logLevel))
             {
                 Write(message, logLevel);
             }
@@ -34,7 +34,7 @@ namespace Portly.Infrastructure.Logging
         public LogProviderBase(bool enableDebug = false) : this([])
         {
             if (enableDebug)
-                _ = Enable(LogLevel.Debug);
+                Enable(LogLevel.Debug);
         }
 
         /// <summary>
@@ -47,27 +47,21 @@ namespace Portly.Infrastructure.Logging
                 [LogLevel.Info, LogLevel.Error, LogLevel.Warning] : defaultLogLevels;
 
             foreach (var level in defaultLogLevels)
-                LogLevels.Add(level);
+                _logLevels.Add(level);
         }
 
-        /// <summary>
-        /// Enables a log level.
-        /// </summary>
-        /// <param name="logLevel"></param>
-        public ILogProvider Enable(LogLevel logLevel)
+        /// <inheritdoc/>
+        public void Enable(params LogLevel[] logLevels)
         {
-            LogLevels.Add(logLevel);
-            return this;
+            foreach (var level in logLevels)
+                _logLevels.Add(level);
         }
 
-        /// <summary>
-        /// Disables a log level.
-        /// </summary>
-        /// <param name="logLevel"></param>
-        public ILogProvider Disable(LogLevel logLevel)
+        /// <inheritdoc/>
+        public void Disable(params LogLevel[] logLevels)
         {
-            LogLevels.Remove(logLevel);
-            return this;
+            foreach (var level in logLevels)
+                _logLevels.Remove(level);
         }
 
         /// <summary>

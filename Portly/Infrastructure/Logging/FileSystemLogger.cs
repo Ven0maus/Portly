@@ -110,8 +110,8 @@ namespace Portly.Infrastructure.Logging
             CleanupOldFiles(levelName);
 
             string fileName = _settings.SplitPerLogLevel
-                ? $"{levelName}_log_{_sessionTimestamp}_{index}.xml"
-                : $"log_{_sessionTimestamp}_{index}.xml";
+                ? $"{levelName}_log_{_sessionTimestamp}_{index}.txt"
+                : $"log_{_sessionTimestamp}_{index}.txt";
 
             string path = Path.Combine(_settings.FolderPath, fileName);
 
