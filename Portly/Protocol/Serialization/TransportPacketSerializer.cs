@@ -1,5 +1,4 @@
 ﻿using MessagePack;
-using Portly.Protocol;
 
 namespace Portly.Protocol.Serialization
 {

@@ -100,6 +100,7 @@ namespace Portly.Protocol.Processing
                             offset += read;
                         }
 
+                        // Convert into internal packet
                         TransportPacket transportPacket;
                         try
                         {
@@ -114,25 +115,30 @@ namespace Portly.Protocol.Processing
                         if (!_replayProtection.ValidateRequest(transportPacket.Nonce, transportPacket.CreationTimestampUtc))
                             throw new Exception("Invalid or replayed packet received.");
 
+                        // Encryption
+                        try
+                        {
+                            if (transportPacket.Encrypted)
+                                transportPacket.Decrypt(_encryptionProvider);
+                            clearDataBufferAfterUse = transportPacket.Encrypted;
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
+                        }
+
+                        // Convert into exposed packet
                         try
                         {
                             packet = _packetSerializer.Deserialize<Packet>(transportPacket.Payload, cancellationToken);
-                            clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
                         }
                         catch (Exception ex)
                         {
                             throw new IOException("Failed to deserialize packet: " + ex.Message, ex);
                         }
 
-                        try
-                        {
-                            if (packet.Encrypted)
-                                packet.Decrypt(_encryptionProvider);
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
-                        }
+                        if (!clearDataBufferAfterUse)
+                            clearDataBufferAfterUse = packet.Identifier.Id == (int)PacketType.SecureHandshake;
                     }
                     finally
                     {
@@ -183,6 +189,7 @@ namespace Portly.Protocol.Processing
                     offset += r;
                 }
 
+                // Convert to internal packet
                 TransportPacket transportPacket;
                 try
                 {
@@ -197,26 +204,31 @@ namespace Portly.Protocol.Processing
                 if (!_replayProtection.ValidateRequest(transportPacket.Nonce, transportPacket.CreationTimestampUtc))
                     throw new Exception("Invalid or replayed packet received.");
 
+                // Encryption
+                try
+                {
+                    if (transportPacket.Encrypted)
+                        transportPacket.Decrypt(_encryptionProvider);
+                    clearDataBufferAfterUse = transportPacket.Encrypted;
+                }
+                catch (Exception ex)
+                {
+                    throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
+                }
+
+                // Convert to exposed packet
                 Packet packet;
                 try
                 {
                     packet = _packetSerializer.Deserialize<Packet>(transportPacket.Payload, cancellationToken);
-                    clearDataBufferAfterUse = packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake;
                 }
                 catch (Exception ex)
                 {
                     throw new IOException("Failed to deserialize packet: " + ex.Message, ex);
                 }
 
-                try
-                {
-                    if (packet.Encrypted)
-                        packet.Decrypt(_encryptionProvider);
-                }
-                catch (Exception ex)
-                {
-                    throw new IOException("Failed to decrypt packet: " + ex.Message, ex);
-                }
+                if (!clearDataBufferAfterUse)
+                    clearDataBufferAfterUse = packet.Identifier.Id == (int)PacketType.SecureHandshake;
 
                 _logProvider?.Log($"Received packet of length {packetLength}.", LogLevel.Debug);
 
@@ -240,16 +252,6 @@ namespace Portly.Protocol.Processing
                 return;
             }
 
-            try
-            {
-                if (encrypted)
-                    packet.Encrypt(_encryptionProvider);
-            }
-            catch (Exception ex)
-            {
-                throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
-            }
-
             byte[] packetPayload = _packetSerializer.Serialize(packet, cancellationToken);
 
             var (nonce, datetime) = ReplayProtection.CreateNonceWithTimestamp();
@@ -259,6 +261,17 @@ namespace Portly.Protocol.Processing
                 Nonce = nonce,
                 CreationTimestampUtc = datetime
             };
+
+            // Encryption
+            try
+            {
+                if (encrypted)
+                    transportPacket.Encrypt(_encryptionProvider);
+            }
+            catch (Exception ex)
+            {
+                throw new IOException("Failed to encrypt packet: " + ex.Message, ex);
+            }
 
             var transportPayload = TransportPacketSerializer.Serialize(transportPacket, cancellationToken);
             if (transportPayload.Length > _maxPacketSize)
@@ -286,7 +299,7 @@ namespace Portly.Protocol.Processing
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, packet.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake);
+                ArrayPool<byte>.Shared.Return(buffer, transportPacket.Encrypted || packet.Identifier.Id == (int)PacketType.SecureHandshake);
             }
         }
     }

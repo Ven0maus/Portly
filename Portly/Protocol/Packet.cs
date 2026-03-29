@@ -1,5 +1,4 @@
 ﻿using MessagePack;
-using Portly.Abstractions;
 using Portly.PacketHandling;
 
 namespace Portly.Protocol
@@ -22,35 +21,20 @@ namespace Portly.Protocol
         [Key(1)]
         public byte[] Payload { get; set; }
 
-        [IgnoreMember]
-        private bool _encrypted;
-        /// <summary>
-        /// Determines if the packet is encrypted or not.
-        /// </summary>
-        [Key(2)]
-        public bool Encrypted
-        {
-            get => _encrypted;
-            init
-            {
-                _encrypted = value;
-            }
-        }
-
         [SerializationConstructor]
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
+        internal Packet(PacketIdentifier identifier, byte[] payload)
         {
             Identifier = identifier;
             Payload = payload;
-            Encrypted = encrypted;
         }
 
         /// <summary>
-        /// Convert to a generic typed packet.
+        /// Converts the packet's payload into a typed payload.
+        /// <br>Note: You can use the packet router to register typed packet handlers.</br>
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public Packet<T> As<T>() => new(Identifier, Payload, Encrypted);
+        public Packet<T> As<T>() => new(Identifier, Payload);
 
         /// <summary>
         /// Creates a packet of the specified type, any MessagePack supported object can be used.
@@ -74,22 +58,6 @@ namespace Portly.Protocol
         /// <returns></returns>
         public static Packet<T> Create<T, TEnum>(TEnum identifier, T payload) where TEnum : Enum
             => Create((PacketIdentifier)identifier, payload);
-
-        /// <inheritdoc/>
-        public void Encrypt(IEncryptionProvider? encryptionProvider)
-        {
-            if (Encrypted || encryptionProvider == null) return;
-            Payload = encryptionProvider.Encrypt(Payload);
-            _encrypted = true;
-        }
-
-        /// <inheritdoc/>
-        public void Decrypt(IEncryptionProvider? encryptionProvider)
-        {
-            if (!Encrypted || encryptionProvider == null) return;
-            Payload = encryptionProvider.Decrypt(Payload);
-            _encrypted = false;
-        }
     }
 
     /// <summary>
@@ -105,8 +73,8 @@ namespace Portly.Protocol
         [IgnoreMember]
         public new T Payload => _payloadObj ??= MessagePackSerializer.Deserialize<T>(base.Payload, MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-        internal Packet(PacketIdentifier identifier, byte[] payload, bool encrypted)
-            : base(identifier, payload, encrypted)
+        internal Packet(PacketIdentifier identifier, byte[] payload)
+            : base(identifier, payload)
         { }
 
         /// <summary>
@@ -124,7 +92,7 @@ namespace Portly.Protocol
                     MessagePackSerializer.Serialize(payload,
                         MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData));
 
-                return new Packet<T>(identifier, serializedPayload, false)
+                return new Packet<T>(identifier, serializedPayload)
                 {
                     _payloadObj = payload,
                 };
