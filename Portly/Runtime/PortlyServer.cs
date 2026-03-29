@@ -12,6 +12,7 @@ using Portly.Transport;
 using Portly.Utilities;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 
 namespace Portly.Runtime
@@ -65,6 +66,14 @@ namespace Portly.Runtime
         /// </summary>
         public event EventHandler<IServerClient, Packet>? OnPacketReceived;
         /// <summary>
+        /// Raised when the server enters a started state.
+        /// </summary>
+        public event EventHandler? OnServerStarted;
+        /// <summary>
+        /// Raised when the server enters a stopped state.
+        /// </summary>
+        public event EventHandler? OnServerStopped;
+        /// <summary>
         /// Raised when a client is connected to the server after the handshake is succesful.
         /// </summary>
         public event EventHandler<IServerClient>? OnClientConnected;
@@ -102,17 +111,12 @@ namespace Portly.Runtime
             _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
             _packetProtocol = packetProtocol ?? (() => new LengthPrefixedPacketProtocol(Configuration, _packetSerializationProvider, _logProvider));
-
-            var ipToUse = IPAddress.Any;
-            if (!string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
-                IPAddress.TryParse(Configuration.ConnectionSettings.IpAddress, out var ipAddress))
-            {
-                ipToUse = ipAddress;
-            }
-
-            _serverTransport = serverTransport ?? new TcpServerTransport(ipToUse, Configuration.ConnectionSettings.Port);
+            _serverTransport = serverTransport ?? new TcpServerTransport(logProvider);
             _trustServer = new TrustServer();
             _cts = new();
+
+            _serverTransport.OnServerStarted += (sender, args) => OnServerStarted?.Invoke(this, EventArgs.Empty);
+            _serverTransport.OnServerStopped += (sender, args) => OnServerStopped?.Invoke(this, EventArgs.Empty);
 
             _keepAliveManager = new(
                 TimeSpan.FromSeconds(Configuration.ConnectionSettings.KeepAliveIntervalSeconds),
@@ -133,8 +137,10 @@ namespace Portly.Runtime
         /// Starts the server asynchronously.
         /// <br>Note: This task runs for as long as the server is running.</br>
         /// </summary>
+        /// <param name="ip">The ip used to listen on, if null it will take the IP defined within the server configuration or all interfaces if none defined.</param>
+        /// <param name="port">The port to be used, if null it will take the port defined within the server configuration.</param>
         /// <returns></returns>
-        public Task StartAsync()
+        public Task StartAsync(IPAddress? ip = null, int? port = null)
         {
             _serverTransport.OnClientAccepted += connection =>
             {
@@ -142,9 +148,36 @@ namespace Portly.Runtime
                 return Task.CompletedTask;
             };
 
+            port ??= Configuration.ConnectionSettings.Port;
+
+            var ipToUse = ip ?? IPAddress.Any;
+            if (ip == null &&
+                !string.IsNullOrWhiteSpace(Configuration.ConnectionSettings.IpAddress) &&
+                IPAddress.TryParse(Configuration.ConnectionSettings.IpAddress, out var ipAddress))
+            {
+                ipToUse = ipAddress;
+            }
+
+            // Useful logging
+            if (IPAddress.Any.Equals(ipToUse) || IPAddress.IPv6Any.Equals(ipToUse))
+            {
+                _logProvider?.Log($"Server started on all interfaces (port {port})");
+
+                var addresses = Dns.GetHostAddresses(Dns.GetHostName())
+                    .Where(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+
+                foreach (var addr in addresses)
+                {
+                    _logProvider?.Log($"  -> {addr}:{port}");
+                }
+            }
+            else
+            {
+                _logProvider?.Log($"Server started on {ipToUse}:{port}");
+            }
+
             _ = _keepAliveManager.StartAsync(_cts.Token);
-            _logProvider?.Log($"Server started on port {Configuration.ConnectionSettings.Port}.");
-            return _serverTransport.StartAsync(_cts.Token);
+            return _serverTransport.StartAsync(ipToUse, port.Value, _cts.Token);
         }
 
         /// <summary>

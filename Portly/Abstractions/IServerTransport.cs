@@ -1,4 +1,6 @@
-﻿namespace Portly.Abstractions
+﻿using System.Net;
+
+namespace Portly.Abstractions
 {
     /// <summary>
     /// Server Transport Provider
@@ -6,11 +8,22 @@
     public interface IServerTransport : IAsyncDisposable
     {
         /// <summary>
+        /// Raised when the server enters a started state.
+        /// </summary>
+        event EventHandler? OnServerStarted;
+        /// <summary>
+        /// Raised when the server enters a stopped state.
+        /// </summary>
+        event EventHandler? OnServerStopped;
+
+        /// <summary>
         /// Starts the server asynchronously.
         /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        Task StartAsync(CancellationToken token);
+        Task StartAsync(IPAddress ip, int port, CancellationToken token);
 
         /// <summary>
         /// Stops the server asynchronously.
