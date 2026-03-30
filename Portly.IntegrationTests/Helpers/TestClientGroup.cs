@@ -9,6 +9,7 @@ namespace Portly.IntegrationTests.Helpers
     {
         public List<TestClientHost> Clients { get; } = [];
 
+        private Dictionary<Guid, TestClientHost>? _clients;
         private readonly TimeSpan _timeout;
 
         public TestClientGroup(int count, TimeSpan? timeout = null)
@@ -22,6 +23,9 @@ namespace Portly.IntegrationTests.Helpers
         {
             await Task.WhenAll(Clients.Select(c => c.ConnectAsync(host, port)))
                 .WaitAsync(_timeout);
+
+            // Build lookup
+            _clients = Clients.ToDictionary(a => a.Client.ServerClientId);
         }
 
         public async Task SendAllAsync(Func<int, Packet> packetFactory)
@@ -33,6 +37,13 @@ namespace Portly.IntegrationTests.Helpers
         public Task SendAsync(int clientIndex, Packet packet)
         {
             var client = Clients[clientIndex];
+            return client.SendAsync(packet)
+                .WaitAsync(_timeout);
+        }
+
+        public Task SendAsync(Guid clientId, Packet packet)
+        {
+            var client = _clients![clientId];
             return client.SendAsync(packet)
                 .WaitAsync(_timeout);
         }

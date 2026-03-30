@@ -34,6 +34,16 @@ namespace Portly.IntegrationTests.Helpers
             await _startedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
+        public async Task SendAsync(IServerClient client, Packet packet, bool encrypt)
+        {
+            await Server.SendToClientAsync(client, packet, encrypt);
+        }
+
+        public async Task SendAllAsync(Packet packet, bool encrypt)
+        {
+            await Server.SendToClientsAsync(packet, encrypt);
+        }
+
         /// <summary>
         /// Note: Must await ConnectAsync of client before connection is available.
         /// </summary>

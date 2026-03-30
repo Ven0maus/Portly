@@ -21,8 +21,7 @@ namespace Portly.IntegrationTests
             var serverConnection = host.GetServerConnection(client);
             var receiveTask = host.WaitForPacketAsync<string>(serverConnection, PacketType.Custom);
 
-            await client.SendAsync(
-                Packet.Create(PacketType.Custom, "hello"));
+            await client.SendAsync(Packet.Create(PacketType.Custom, "hello"));
 
             var received = await receiveTask;
 
