@@ -243,6 +243,8 @@ namespace Portly.Runtime
             {
                 await DisconnectInternalAsync(false);
             }
+
+            await _trustClient.DisposeAsync();
         }
 
         private bool TryTransition(ClientState from, ClientState to)

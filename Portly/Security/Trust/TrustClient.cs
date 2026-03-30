@@ -8,13 +8,13 @@ namespace Portly.Security.Trust
     /// <summary>
     /// Manages Trust-On-First-Use (TOFU) for servers from the client perspective. Its responsibility is to establish and maintain trust in a server’s identity across connections.
     /// </summary>
-    internal class TrustClient
+    internal class TrustClient : IAsyncDisposable
     {
         private const string SERVER_STORAGE_PATH = "known_servers.json";
         private readonly ConcurrentDictionary<string, ServerInfo> _knownServers;
         private readonly Lock _lock = new();
         private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
-        private static readonly Mutex _fileMutex = new Mutex(false, "Portly_KnownServers_FileMutex");
+        private static readonly Mutex _fileMutex = new(false, "Portly_KnownServers_FileMutex");
 
         public TrustClient()
         {
@@ -130,6 +130,12 @@ namespace Portly.Security.Trust
             {
                 _fileMutex.ReleaseMutex();
             }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _fileMutex.Dispose();
+            return ValueTask.CompletedTask;
         }
 
         private class ServerInfo
