@@ -14,11 +14,12 @@ namespace Portly.IntegrationTests
             await using var host = new TestServerHost();
             await host.StartAsync();
 
-            await using var client = new TestClientHost();
-
-            var receiveTask = host.WaitForPacketAsync<string>(PacketType.Custom);
+            await using var client = new TestClientHost(host);
 
             await client.ConnectAsync("localhost", host.Port);
+
+            var serverConnection = host.GetServerConnection(client);
+            var receiveTask = host.WaitForPacketAsync<string>(serverConnection, PacketType.Custom);
 
             await client.SendAsync(
                 Packet.Create(PacketType.Custom, "hello"));

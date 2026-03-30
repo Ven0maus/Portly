@@ -10,9 +10,10 @@ namespace Portly.IntegrationTests.Helpers
     {
         public PortlyClient Client { get; }
 
-        public TestClientHost()
+        public TestClientHost(TestServerHost host)
         {
             Client = new PortlyClient();
+            host.RegisterPendingClient(this);
         }
 
         public async Task ConnectAsync(string host, int port)

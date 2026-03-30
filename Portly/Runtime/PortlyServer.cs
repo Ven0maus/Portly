@@ -59,7 +59,14 @@ namespace Portly.Runtime
         /// All connected clients.
         /// </summary>
         public IReadOnlyCollection<IServerClient> ConnectedClients =>
-            _clients.Values.Cast<IServerClient>().ToList().AsReadOnly();
+            [.. _clients.Values];
+
+        /// <summary>
+        /// Returns the specific client by guid.
+        /// </summary>
+        /// <param name="clientId"></param>
+        /// <returns></returns>
+        public IServerClient GetClient(Guid clientId) => _clients[clientId];
 
         /// <summary>
         /// Raised when a packet is received from a client.
