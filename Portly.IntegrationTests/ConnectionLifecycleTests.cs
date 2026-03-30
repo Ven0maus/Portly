@@ -1,6 +1,7 @@
 ﻿using Portly.IntegrationTests.Helpers;
 using Portly.Protocol;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace Portly.IntegrationTests
 {
@@ -347,6 +348,90 @@ namespace Portly.IntegrationTests
                     Assert.That(kvp.Value, Is.EqualTo(packetsPerClient));
                 }
             }
+        }
+
+        [Test]
+        public async Task Packets_Should_Maintain_Order_Under_Concurrent_Clients()
+        {
+            await using var host = new TestServerHost();
+            await host.StartAsync();
+
+            await using var clients = new TestClientGroup(5);
+            await clients.ConnectAllAsync("localhost", host.Port);
+
+            var connections = clients.Clients
+                .Select(c => host.GetServerConnection(c))
+                .ToList();
+
+            var receiveTasks = connections.Select(conn =>
+                Task.Run(async () =>
+                {
+                    var list = new List<int>();
+
+                    for (int i = 0; i < 10; i++)
+                    {
+                        var msg = await host.WaitForPacketAsync<string>(conn, PacketType.Custom);
+                        list.Add(int.Parse(msg));
+                    }
+
+                    return list;
+                }))
+                .ToList();
+
+            // Concurrent sends with interleaving
+            var sendTasks = clients.Clients.Select((c, ci) =>
+                Task.Run(async () =>
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        await c.SendAsync(Packet.Create(PacketType.Custom, $"{i}"));
+                    }
+                }));
+
+            await Task.WhenAll(sendTasks);
+
+            var results = await Task.WhenAll(receiveTasks);
+
+            foreach (var sequence in results)
+            {
+                Assert.That(sequence, Is.EqualTo(sequence.OrderBy(x => x)));
+            }
+        }
+
+        [Test]
+        public async Task Clients_Should_Handle_Frequent_Connect_Disconnect()
+        {
+            await using var host = new TestServerHost();
+            await host.StartAsync();
+
+            var client = new TestClientHost();
+            var sw = Stopwatch.StartNew();
+
+            for (int i = 0; i < 20; i++)
+            {
+                sw.Restart();
+                await client.ConnectAsync("localhost", host.Port);
+                TestContext.Progress.WriteLine($"Connect {i}: {sw.ElapsedMilliseconds} ms");
+                await client.Client.DisconnectAsync();
+            }
+
+            Assert.That(host.Server.ConnectedClients, Is.Empty);
+        }
+
+        [Test]
+        public async Task WaitForPacket_Should_Timeout_When_No_Packet()
+        {
+            await using var host = new TestServerHost();
+            await host.StartAsync();
+
+            var client = new TestClientHost();
+            await client.ConnectAsync("localhost", host.Port);
+
+            var conn = host.GetServerConnection(client);
+
+            var task = host.WaitForPacketAsync<string>(conn, PacketType.Custom);
+
+            Assert.ThrowsAsync<TimeoutException>(async () => await task);
         }
     }
 }
