@@ -81,7 +81,7 @@ namespace Portly.Runtime
         /// <summary>
         /// Determines if the client is connected to the server.
         /// </summary>
-        public bool Connected => Volatile.Read(ref _state) == (int)ClientState.Connected;
+        public bool IsConnected => Volatile.Read(ref _state) == (int)ClientState.Connected;
 
         /// <summary>
         /// The id that the server assigned the client.
@@ -195,7 +195,7 @@ namespace Portly.Runtime
                     finally
                     {
                         // Trigger disconnect, but do NOT await it here
-                        if (Connected)
+                        if (IsConnected)
                             _ = DisconnectInternalAsync(false);
                     }
                 });
@@ -314,7 +314,7 @@ namespace Portly.Runtime
         /// <inheritdoc/>
         public async Task SendPacketAsync(Packet packet, bool encrypt)
         {
-            if (!Connected)
+            if (!IsConnected)
                 throw new InvalidOperationException("Client is not connected.");
 
             if (_stream == null)

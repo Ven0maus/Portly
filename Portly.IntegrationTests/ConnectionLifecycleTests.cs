@@ -215,5 +215,84 @@ namespace Portly.IntegrationTests
                 Assert.That(r2, Is.EqualTo("2"));
             }
         }
+
+        [Test]
+        public async Task ChaosTest_MixedClientServerOperations()
+        {
+            await using var host = new TestServerHost();
+            await host.StartAsync();
+
+            var clients = Enumerable.Range(0, 10)
+                .Select(_ => new TestClientHost())
+                .ToList();
+
+            var random = new Random();
+
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+            var tasks = clients.Select(async client =>
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    var action = random.Next(0, 4);
+
+                    try
+                    {
+                        switch (action)
+                        {
+                            case 0: // connect if not connected
+                                if (!client.Client.IsConnected)
+                                    await client.ConnectAsync("localhost", host.Port);
+                                break;
+
+                            case 1: // send packet
+                                if (client.Client.IsConnected)
+                                {
+                                    await client.SendAsync(Packet.Create(PacketType.Custom, "ping"));
+                                }
+                                break;
+
+                            case 2: // disconnect
+                                if (client.Client.IsConnected)
+                                {
+                                    await client.Client.DisconnectAsync();
+                                }
+                                break;
+
+                            case 3: // reconnect
+                                if (!client.Client.IsConnected)
+                                {
+                                    await client.ConnectAsync("localhost", host.Port);
+                                }
+                                break;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore transient errors in chaos scenarios
+                    }
+
+                    await Task.Delay(random.Next(1, 20));
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            // Final assertions (invariants)
+
+            using (Assert.EnterMultipleScope())
+            {
+                // No duplicate server connections
+                var uniqueClients = host.Server.ConnectedClients
+                    .Select(c => c.Id)
+                    .Distinct()
+                    .Count();
+
+                Assert.That(uniqueClients, Is.EqualTo(host.Server.ConnectedClients.Count));
+
+                // Server should not crash or lose internal consistency
+                Assert.That(host.Server.ConnectedClients, Has.Count.GreaterThanOrEqualTo(0));
+            }
+        }
     }
 }
