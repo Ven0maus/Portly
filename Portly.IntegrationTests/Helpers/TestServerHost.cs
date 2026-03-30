@@ -2,6 +2,7 @@
 using Portly.PacketHandling;
 using Portly.Protocol;
 using Portly.Runtime;
+using System.Net;
 
 namespace Portly.IntegrationTests.Helpers
 {
@@ -30,11 +31,11 @@ namespace Portly.IntegrationTests.Helpers
             Server.OnClientDisconnected += HandleClientDisconnected;
         }
 
-        public async Task StartAsync()
+        public async Task StartAsync(int? port = null)
         {
-            Port = Tools.GetFreePort();
-            ServerTask = Server.StartAsync(port: Port);
+            ServerTask = Server.StartAsync(port: port ?? 0);
             await _startedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Port = ((IPEndPoint)Server.LocalEndpoint!).Port;
         }
 
         public async Task SendAsync(IServerClient client, Packet packet, bool encrypt)

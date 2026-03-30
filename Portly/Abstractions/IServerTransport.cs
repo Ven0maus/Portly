@@ -15,6 +15,15 @@ namespace Portly.Abstractions
         /// Raised when the server enters a stopped state.
         /// </summary>
         event EventHandler? OnServerStopped;
+        /// <summary>
+        /// Raised when a new client is accepted.
+        /// </summary>
+        event Func<ITransportConnection, Task>? OnClientAccepted;
+
+        /// <summary>
+        /// The local endpoint of the server.
+        /// </summary>
+        EndPoint? LocalEndPoint { get; }
 
         /// <summary>
         /// Starts the server asynchronously.
@@ -30,10 +39,5 @@ namespace Portly.Abstractions
         /// </summary>
         /// <returns></returns>
         Task StopAsync();
-
-        /// <summary>
-        /// Raised when a new client is accepted.
-        /// </summary>
-        event Func<ITransportConnection, Task>? OnClientAccepted;
     }
 }

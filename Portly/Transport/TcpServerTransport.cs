@@ -18,6 +18,9 @@ namespace Portly.Transport
         private readonly ILogProvider? _logProvider = logProvider;
 
         /// <inheritdoc/>
+        public EndPoint? LocalEndPoint { get; private set; }
+
+        /// <inheritdoc/>
         public event Func<ITransportConnection, Task>? OnClientAccepted;
         /// <inheritdoc/>
         public event EventHandler? OnServerStarted;
@@ -32,6 +35,7 @@ namespace Portly.Transport
 
             _listener = new TcpListener(ip, port);
             _listener.Start();
+            LocalEndPoint = _listener.LocalEndpoint;
             OnServerStarted?.Invoke(this, EventArgs.Empty);
 
             try
@@ -82,6 +86,7 @@ namespace Portly.Transport
 
                 _listener = null;
                 Interlocked.Exchange(ref _state, 0);
+                LocalEndPoint = null;
                 OnServerStopped?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -99,6 +104,7 @@ namespace Portly.Transport
             catch { }
 
             _listener = null;
+            LocalEndPoint = null;
             OnServerStopped?.Invoke(this, EventArgs.Empty);
             return Task.CompletedTask;
         }

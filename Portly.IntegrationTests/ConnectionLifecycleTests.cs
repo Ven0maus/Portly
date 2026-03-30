@@ -404,7 +404,7 @@ namespace Portly.IntegrationTests
             await using var host = new TestServerHost();
             await host.StartAsync();
 
-            var client = new TestClientHost();
+            await using var client = new TestClientHost();
 
             for (int i = 0; i < 20; i++)
             {

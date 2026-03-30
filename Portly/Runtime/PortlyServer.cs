@@ -69,6 +69,11 @@ namespace Portly.Runtime
         public IServerClient GetClient(Guid clientId) => _clients[clientId];
 
         /// <summary>
+        /// Populated upon server start.
+        /// </summary>
+        public EndPoint? LocalEndpoint => _serverTransport.LocalEndPoint;
+
+        /// <summary>
         /// Raised when a packet is received from a client.
         /// </summary>
         public event EventHandler<IServerClient, Packet>? OnPacketReceived;
