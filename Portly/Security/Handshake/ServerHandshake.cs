@@ -10,5 +10,8 @@ namespace Portly.Security.Handshake
 
         [Key(1)]
         public byte[] Signature { get; set; } = [];
+
+        [Key(2)]
+        public Guid ClientId { get; set; }
     }
 }

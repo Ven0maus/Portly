@@ -540,7 +540,6 @@ namespace Portly.Runtime
 
         private async Task<bool> PerformSecureHandshakeAsync(ServerClient connection)
         {
-            // TODO: Rework to support custom handshake/encryption providers?
             // 1. Send server identity public key
             byte[] publicKey = _trustServer.GetPublicKey();
 
@@ -590,7 +589,8 @@ namespace Portly.Runtime
             var response = new ServerHandshake
             {
                 ServerEphemeralKey = keyExchange.PublicKey,
-                Signature = signature
+                Signature = signature,
+                ClientId = connection.Id
             };
 
             await connection.SendPacketAsync(Packet<ServerHandshake>.Create(

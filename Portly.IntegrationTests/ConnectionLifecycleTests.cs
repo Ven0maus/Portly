@@ -14,7 +14,7 @@ namespace Portly.IntegrationTests
             await using var host = new TestServerHost();
             await host.StartAsync();
 
-            await using var client = new TestClientHost(host);
+            await using var client = new TestClientHost();
 
             await client.ConnectAsync("localhost", host.Port);
 

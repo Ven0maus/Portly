@@ -83,6 +83,11 @@ namespace Portly.Runtime
         /// </summary>
         public bool Connected => Volatile.Read(ref _state) == (int)ClientState.Connected;
 
+        /// <summary>
+        /// The id that the server assigned the client.
+        /// </summary>
+        public Guid ServerClientId { get; private set; }
+
         private CancellationToken Token
         {
             get
@@ -453,6 +458,9 @@ namespace Portly.Runtime
             _packetProtocol.SetEncryptionProvider(
                 _encryptionProvider.Invoke(
                     keyExchange.DeriveSharedKey(response.Payload.ServerEphemeralKey)));
+
+            // Assign client id
+            ServerClientId = response.Payload.ClientId;
         }
     }
 }

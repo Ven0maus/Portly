@@ -11,11 +11,11 @@ namespace Portly.IntegrationTests.Helpers
 
         private readonly TimeSpan _timeout;
 
-        public TestClientGroup(int count, TestServerHost host, TimeSpan? timeout = null)
+        public TestClientGroup(int count, TimeSpan? timeout = null)
         {
             _timeout = timeout ?? TimeSpan.FromSeconds(5);
             for (int i = 0; i < count; i++)
-                Clients.Add(new TestClientHost(host));
+                Clients.Add(new TestClientHost());
         }
 
         public async Task ConnectAllAsync(string host, int port)

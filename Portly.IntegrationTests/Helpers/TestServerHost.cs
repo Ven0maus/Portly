@@ -15,10 +15,8 @@ namespace Portly.IntegrationTests.Helpers
         public int Port { get; }
 
         private readonly Lock _lock = new();
-        private readonly Dictionary<(IServerClient Client, int PacketId), Queue<TaskCompletionSource<Packet>>> _waiters = new();
-        private readonly Dictionary<TestClientHost, IServerClient> _clientMap = new();
-        private readonly Dictionary<IServerClient, TestClientHost> _reverseMap = new();
-        private readonly Queue<TestClientHost> _pendingClients = new();
+        private readonly Dictionary<(IServerClient Client, int PacketId), Queue<TaskCompletionSource<Packet>>> _waiters = [];
+        private readonly Dictionary<Guid, IServerClient> _clientMap = [];
         private readonly TaskCompletionSource _startedTcs = new();
 
         public TestServerHost()
@@ -36,14 +34,6 @@ namespace Portly.IntegrationTests.Helpers
             await _startedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
-        public void RegisterPendingClient(TestClientHost client)
-        {
-            lock (_lock)
-            {
-                _pendingClients.Enqueue(client);
-            }
-        }
-
         /// <summary>
         /// Note: Must await ConnectAsync of client before connection is available.
         /// </summary>
@@ -53,7 +43,7 @@ namespace Portly.IntegrationTests.Helpers
         {
             lock (_lock)
             {
-                return _clientMap[client];
+                return _clientMap[client.Client.ServerClientId];
             }
         }
 
@@ -114,10 +104,7 @@ namespace Portly.IntegrationTests.Helpers
         {
             lock (_lock)
             {
-                var testClient = _pendingClients.Dequeue();
-
-                _clientMap[testClient] = e;
-                _reverseMap[e] = testClient;
+                _clientMap[e.Id] = e;
             }
         }
     }
