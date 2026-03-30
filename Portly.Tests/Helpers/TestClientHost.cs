@@ -2,7 +2,7 @@
 using Portly.Protocol;
 using Portly.Runtime;
 
-namespace Portly.IntegrationTests.Helpers
+namespace Portly.Tests.Helpers
 {
     /// <summary>
     /// Ready to use client host with awaitable connect, sending and timeouts.

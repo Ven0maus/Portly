@@ -16,7 +16,7 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-[assembly: InternalsVisibleTo("Portly.IntegrationTests")]
+[assembly: InternalsVisibleTo("Portly.Tests")]
 namespace Portly.Runtime
 {
     /// <summary>

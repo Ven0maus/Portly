@@ -1,4 +1,4 @@
-﻿namespace Portly.IntegrationTests.Helpers
+﻿namespace Portly.Tests.Helpers
 {
     /// <summary>
     /// Contains a set of useful tools / helper methods.

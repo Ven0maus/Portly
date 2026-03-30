@@ -1,6 +1,6 @@
 ﻿using Portly.Protocol;
 
-namespace Portly.IntegrationTests.Helpers
+namespace Portly.Tests.Helpers
 {
     /// <summary>
     /// Contains a group of <see cref="TestClientHost"/> to simplify simulation of multiple client actions at once.

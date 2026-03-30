@@ -1,4 +1,4 @@
-﻿namespace Portly.IntegrationTests
+﻿namespace Portly.Tests.Objects
 {
     /// <summary>
     /// All available test packets

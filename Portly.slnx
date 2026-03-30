@@ -1,6 +1,6 @@
 <Solution>
   <Project Path="Portly.ExampleClient/Portly.ExampleClient.csproj" />
   <Project Path="Portly.ExampleServer/Portly.ExampleServer.csproj" />
-  <Project Path="Portly.IntegrationTests/Portly.IntegrationTests.csproj" Id="160f3a2e-9b64-4e25-a521-6a0ba1dd6f88" />
+  <Project Path="Portly.Tests/Portly.Tests.csproj" Id="160f3a2e-9b64-4e25-a521-6a0ba1dd6f88" />
   <Project Path="Portly/Portly.csproj" />
 </Solution>

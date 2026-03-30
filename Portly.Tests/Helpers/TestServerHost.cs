@@ -4,7 +4,7 @@ using Portly.Protocol;
 using Portly.Runtime;
 using System.Net;
 
-namespace Portly.IntegrationTests.Helpers
+namespace Portly.Tests.Helpers
 {
     /// <summary>
     /// Ready to use server host with awaitable startup and timeout.
