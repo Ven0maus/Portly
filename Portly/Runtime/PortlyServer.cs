@@ -626,6 +626,8 @@ namespace Portly.Runtime
             // Rate limit non-system packets
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
             {
+                // TODO: ip-ban the connection after repeated attempts.
+
                 _logProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
                 await connection.DisconnectAsync("Rate limit exceeded.");
                 return;
