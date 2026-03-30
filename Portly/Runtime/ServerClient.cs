@@ -28,6 +28,8 @@ namespace Portly.Runtime
         public Guid Id { get; } = Guid.NewGuid();
         internal IPacketProtocol PacketProtocol { get; } = packetProtocol;
 
+        public bool IsConnected => Connection.IsConnected;
+
         private int _disconnected = 0;
         private readonly IPacketProtocol _packetProtocol = packetProtocol;
         private readonly KeepAliveManager<ServerClient> _keepAliveManager = keepAliveManager;

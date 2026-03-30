@@ -18,6 +18,11 @@ namespace Portly.Abstractions
         IPAddress IpAddress { get; }
 
         /// <summary>
+        /// Determines if the client is connected to the server.
+        /// </summary>
+        bool IsConnected { get; }
+
+        /// <summary>
         /// Disconnects the client from the server, and informing them with a disconnect packet.
         /// </summary>
         Task DisconnectAsync(string reason = "", bool informClient = true);
