@@ -5,17 +5,16 @@
     /// </summary>
     internal static class Tools
     {
-        internal static void CleanupClientSetup()
+        internal static (string serverDir, string clientDir) CreateIsolatedTestDirectories()
         {
-            File.Delete("known_servers.json");
-        }
+            var mainFolder = Path.Combine("PortlyTests", $"{Guid.NewGuid()}");
+            var clientFolder = Path.Combine(mainFolder, "client");
+            var serverFolder = Path.Combine(mainFolder, "server");
 
-        internal static void CleanupServerSetup()
-        {
-            File.Delete("server_key.json");
-            File.Delete("server_config.xml");
-            File.Delete("ip-blacklist.txt");
-            File.Delete("ip-whitelist.txt");
+            Directory.CreateDirectory(clientFolder);
+            Directory.CreateDirectory(serverFolder);
+
+            return (serverFolder, clientFolder);
         }
     }
 }

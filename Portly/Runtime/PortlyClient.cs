@@ -39,7 +39,7 @@ namespace Portly.Runtime
 
         private int _state = (int)ClientState.Disconnected;
 
-        private readonly TrustClient _trustClient = new();
+        private readonly TrustClient _trustClient;
         private IClientTransport? _clientTransport;
         private readonly Func<IClientTransport> _clientTransportFactory;
 
@@ -99,15 +99,7 @@ namespace Portly.Runtime
             }
         }
 
-        /// <summary>
-        /// Constructor
-        /// </summary>
-        /// <param name="clientTransport"></param>
-        /// <param name="packetProtocol"></param>
-        /// <param name="packetSerializationProvider"></param>
-        /// <param name="encryptionProvider"></param>
-        /// <param name="logProvider"></param>
-        public PortlyClient(
+        internal PortlyClient(string? folder = null,
             Func<IClientTransport>? clientTransport = null,
             IPacketProtocol? packetProtocol = null,
             IPacketSerializationProvider? packetSerializationProvider = null,
@@ -116,6 +108,7 @@ namespace Portly.Runtime
         {
             var packetSerializer = packetSerializationProvider ?? new MessagePackSerializationProvider();
 
+            _trustClient = new(folder);
             _encryptionProvider = encryptionProvider ?? (key => new AESEncryptionProvider(key));
 
             _packetProtocol = packetProtocol ??
@@ -132,6 +125,25 @@ namespace Portly.Runtime
             _packetRouter = new(logProvider);
 
             RegisterPredefinedRoutes();
+        }
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="clientTransport"></param>
+        /// <param name="packetProtocol"></param>
+        /// <param name="packetSerializationProvider"></param>
+        /// <param name="encryptionProvider"></param>
+        /// <param name="logProvider"></param>
+        public PortlyClient(
+            Func<IClientTransport>? clientTransport = null,
+            IPacketProtocol? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null) :
+            this(null, clientTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider)
+        {
+
         }
 
         private void RegisterPredefinedRoutes()
@@ -243,8 +255,6 @@ namespace Portly.Runtime
             {
                 await DisconnectInternalAsync(false);
             }
-
-            await _trustClient.DisposeAsync();
         }
 
         private bool TryTransition(ClientState from, ClientState to)

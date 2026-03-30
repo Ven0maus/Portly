@@ -13,8 +13,10 @@ using Portly.Utilities;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 
+[assembly: InternalsVisibleTo("Portly.IntegrationTests")]
 namespace Portly.Runtime
 {
     /// <summary>
@@ -99,15 +101,7 @@ namespace Portly.Runtime
         /// </summary>
         public ServerConfiguration Configuration { get; }
 
-        /// <summary>
-        /// Constructor
-        /// </summary>
-        /// <param name="serverTransport"></param>
-        /// <param name="packetProtocol"></param>
-        /// <param name="packetSerializationProvider"></param>
-        /// <param name="encryptionProvider"></param>
-        /// <param name="logProvider"></param>
-        public PortlyServer(
+        internal PortlyServer(string? folder = null,
             IServerTransport? serverTransport = null,
             Func<IPacketProtocol>? packetProtocol = null,
             IPacketSerializationProvider? packetSerializationProvider = null,
@@ -117,14 +111,14 @@ namespace Portly.Runtime
             _logProvider = logProvider;
             _packetRouter = new(logProvider);
 
-            Configuration = ServerConfiguration.Load(logProvider: _logProvider);
+            Configuration = ServerConfiguration.Load(logProvider: _logProvider, folder: folder);
             Configuration.Validate();
 
             _packetSerializationProvider = packetSerializationProvider ?? new MessagePackSerializationProvider();
             _encryptionProvider = encryptionProvider ?? ((sessionKey) => new AESEncryptionProvider(sessionKey));
             _packetProtocol = packetProtocol ?? (() => new LengthPrefixedPacketProtocol(Configuration, _packetSerializationProvider, _logProvider));
             _serverTransport = serverTransport ?? new TcpServerTransport(logProvider);
-            _trustServer = new TrustServer();
+            _trustServer = new TrustServer(folder);
             _cts = new();
 
             _serverTransport.OnServerStarted += (sender, args) => OnServerStarted?.Invoke(this, EventArgs.Empty);
@@ -138,6 +132,23 @@ namespace Portly.Runtime
 
             RegisterPredefinedRoutes();
         }
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="serverTransport"></param>
+        /// <param name="packetProtocol"></param>
+        /// <param name="packetSerializationProvider"></param>
+        /// <param name="encryptionProvider"></param>
+        /// <param name="logProvider"></param>
+        public PortlyServer(
+            IServerTransport? serverTransport = null,
+            Func<IPacketProtocol>? packetProtocol = null,
+            IPacketSerializationProvider? packetSerializationProvider = null,
+            Func<byte[], IEncryptionProvider>? encryptionProvider = null,
+            ILogProvider? logProvider = null) :
+            this(null, serverTransport, packetProtocol, packetSerializationProvider, encryptionProvider, logProvider)
+        { }
 
         private void RegisterPredefinedRoutes()
         {

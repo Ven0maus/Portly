@@ -1,5 +1,4 @@
 ﻿using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -8,16 +7,16 @@ namespace Portly.Security.Trust
     /// <summary>
     /// Manages Trust-On-First-Use (TOFU) for servers from the client perspective. Its responsibility is to establish and maintain trust in a server’s identity across connections.
     /// </summary>
-    internal class TrustClient : IAsyncDisposable
+    internal class TrustClient
     {
         private const string SERVER_STORAGE_PATH = "known_servers.json";
         private readonly ConcurrentDictionary<string, ServerInfo> _knownServers;
-        private readonly Lock _lock = new();
         private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
-        private static readonly Mutex _fileMutex = new(false, "Portly_KnownServers_FileMutex");
+        private readonly string _folder;
 
-        public TrustClient()
+        public TrustClient(string? folder = null)
         {
+            _folder = folder ?? string.Empty;
             _knownServers = LoadKnownServers();
         }
 
@@ -26,55 +25,44 @@ namespace Portly.Security.Trust
             string key = $"{host.ToLowerInvariant()}:{port}";
             string fingerprint = ComputeFingerprint(publicKey);
 
-            bool isNewEntry;
-            lock (_lock)
+            if (_knownServers.TryGetValue(key, out var info))
             {
-                if (_knownServers.TryGetValue(key, out var info))
-                {
-                    return info.Fingerprint == fingerprint;
-                }
-
-                _knownServers[key] = new ServerInfo
-                {
-                    Host = host,
-                    Port = port,
-                    Fingerprint = fingerprint
-                };
-
-                isNewEntry = true;
+                return info.Fingerprint == fingerprint;
             }
 
-            // Save outside lock (important)
-            if (isNewEntry)
-                await SaveKnownServers();
+            _knownServers[key] = new ServerInfo
+            {
+                Host = host,
+                Port = port,
+                Fingerprint = fingerprint
+            };
+
+            await SaveKnownServers();
 
             return true;
         }
 
         private ConcurrentDictionary<string, ServerInfo> LoadKnownServers()
         {
-            lock (_lock)
-            {
-                if (!File.Exists(SERVER_STORAGE_PATH))
-                    return [];
+            if (!File.Exists(GetFile(SERVER_STORAGE_PATH)))
+                return [];
 
-                using var stream = new FileStream(
-                    SERVER_STORAGE_PATH,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete); // Allows file being replaced after read
+            using var stream = new FileStream(
+                GetFile(SERVER_STORAGE_PATH),
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read);
 
-                if (stream.Length == 0)
-                    return [];
+            if (stream.Length == 0)
+                return [];
 
-                var list = JsonSerializer.Deserialize<List<ServerInfo>>(stream, _serializerOptions) ?? [];
+            var list = JsonSerializer.Deserialize<List<ServerInfo>>(stream, _serializerOptions) ?? [];
 
-                var dict = new ConcurrentDictionary<string, ServerInfo>();
-                foreach (var server in list)
-                    dict[$"{server.Host}:{server.Port}"] = server;
+            var dict = new ConcurrentDictionary<string, ServerInfo>();
+            foreach (var server in list)
+                dict[$"{server.Host}:{server.Port}"] = server;
 
-                return dict;
-            }
+            return dict;
         }
 
         private static string ComputeFingerprint(byte[] publicKey)
@@ -85,57 +73,19 @@ namespace Portly.Security.Trust
 
         private async Task SaveKnownServers()
         {
-            var tempPath = Path.GetFileNameWithoutExtension(SERVER_STORAGE_PATH) + $"_{Guid.NewGuid()}.tmp";
+            List<ServerInfo> snapshot = [.. _knownServers.Values];
 
-            List<ServerInfo> snapshot;
-
-            lock (_lock)
-            {
-                snapshot = [.. _knownServers.Values];
-            }
-
-            _fileMutex.WaitOne();
-            try
-            {
-                // write temp + move
-                // Write temp file
-                using (var stream = new FileStream(
-                    tempPath,
-                    FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None))
-                {
-                    JsonSerializer.Serialize(stream, snapshot, _serializerOptions);
-                }
-
-                var timeout = TimeSpan.FromSeconds(2);
-                var sw = Stopwatch.StartNew();
-
-                while (true)
-                {
-                    try
-                    {
-                        File.Move(tempPath, SERVER_STORAGE_PATH, overwrite: true);
-                        return;
-                    }
-                    catch (IOException) when (sw.Elapsed < timeout)
-                    {
-                        await Task.Delay(Random.Shared.Next(5, 25)); // jitter
-                    }
-                }
-
-                throw new IOException("Failed to update known servers file.");
-            }
-            finally
-            {
-                _fileMutex.ReleaseMutex();
-            }
+            using var stream = new FileStream(
+                GetFile(SERVER_STORAGE_PATH),
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None);
+            JsonSerializer.Serialize(stream, snapshot, _serializerOptions);
         }
 
-        public ValueTask DisposeAsync()
+        private string GetFile(string path)
         {
-            _fileMutex.Dispose();
-            return ValueTask.CompletedTask;
+            return Path.Combine(_folder, path);
         }
 
         private class ServerInfo

@@ -8,16 +8,20 @@ namespace Portly.Security.Trust
     /// </summary>
     internal class TrustServer
     {
-        // TODO: Make this injectable/changeable so tests can store in their own directories
-        // Ideally this would be a directory that can be defined in the top scope, and all files go there not just the trust files.
         private const string KEY_STORAGE_PATH = "server_key.json";
         private readonly ECDsa _keyPair;
-        private readonly Lock _lock = new();
         private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
+        private readonly string _folder;
 
-        public TrustServer()
+        public TrustServer(string? folder = null)
         {
+            _folder = folder ?? string.Empty;
             _keyPair = LoadOrCreateKeyPair();
+        }
+
+        private string GetFile(string path)
+        {
+            return Path.Combine(_folder, path);
         }
 
         public byte[] GetPublicKey()
@@ -28,46 +32,32 @@ namespace Portly.Security.Trust
 
         private ECDsa LoadOrCreateKeyPair()
         {
-            lock (_lock)
+            if (File.Exists(GetFile(KEY_STORAGE_PATH)) && TryLoadKeyPair(out var keypair))
+                return keypair!;
+
+            keypair = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var keyData = new KeyPairData
             {
-                if (File.Exists(KEY_STORAGE_PATH) && TryLoadKeyPair(out var keypair))
-                    return keypair!;
+                PrivateKey = Convert.ToBase64String(keypair.ExportECPrivateKey()),
+                PublicKey = Convert.ToBase64String(keypair.ExportSubjectPublicKeyInfo())
+            };
 
-                keypair = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-                var keyData = new KeyPairData
-                {
-                    PrivateKey = Convert.ToBase64String(keypair.ExportECPrivateKey()),
-                    PublicKey = Convert.ToBase64String(keypair.ExportSubjectPublicKeyInfo())
-                };
+            using var writeStream = new FileStream(
+                GetFile(KEY_STORAGE_PATH),
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None);
 
-                try
-                {
-                    using var writeStream = new FileStream(
-                        KEY_STORAGE_PATH,
-                        FileMode.CreateNew,
-                        FileAccess.Write,
-                        FileShare.None);
+            JsonSerializer.Serialize(writeStream, keyData, _serializerOptions);
 
-                    JsonSerializer.Serialize(writeStream, keyData, _serializerOptions);
-                }
-                catch (IOException) when (File.Exists(KEY_STORAGE_PATH))
-                {
-                    // Another process created it -> load instead
-                    if (TryLoadKeyPair(out var loaded))
-                        return loaded!;
-
-                    throw; // if load fails, something else is wrong
-                }
-
-                return keypair;
-            }
+            return keypair;
         }
 
-        private static bool TryLoadKeyPair(out ECDsa? keypair)
+        private bool TryLoadKeyPair(out ECDsa? keypair)
         {
             keypair = null;
             using var readStream = new FileStream(
-                KEY_STORAGE_PATH,
+                GetFile(KEY_STORAGE_PATH),
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read);

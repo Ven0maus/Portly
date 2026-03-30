@@ -5,19 +5,20 @@ using System.Net;
 
 namespace Portly.Infrastructure.Configuration
 {
-    internal class ConfigurationService(ISerializer? serializer = null, ILogProvider? logProvider = null)
+    internal class ConfigurationService(ISerializer? serializer = null, ILogProvider? logProvider = null, string? folder = null)
     {
         private readonly ISerializer _serializer = serializer ?? new XmlProvider();
         private readonly ILogProvider? _logProvider = logProvider;
+        private readonly string _folder = folder ?? string.Empty;
 
         public ServerConfiguration Load()
         {
-            var file = LoadOrCreate<ConfigurationFile>("server_config");
+            var file = LoadOrCreate<ConfigurationFile>(GetFile("server_config"));
             var configuration = new ServerConfiguration
             {
                 RateLimits = file.RateLimits,
-                IpBlacklist = LoadList("ip-blacklist.txt"),
-                IpWhitelist = LoadList("ip-whitelist.txt")
+                IpBlacklist = LoadList(GetFile("ip-blacklist.txt")),
+                IpWhitelist = LoadList(GetFile("ip-whitelist.txt"))
             };
 
             _logProvider?.Log("Loaded configuration files.", LogLevel.Debug);
@@ -35,12 +36,17 @@ namespace Portly.Infrastructure.Configuration
                 RateLimits = config.RateLimits
             };
 
-            _ = SaveOrCreate("server_config", file);
+            _ = SaveOrCreate(GetFile("server_config"), file);
 
-            SaveList("ip-blacklist.txt", config.IpBlacklist);
-            SaveList("ip-whitelist.txt", config.IpWhitelist);
+            SaveList(GetFile("ip-blacklist.txt"), config.IpBlacklist);
+            SaveList(GetFile("ip-whitelist.txt"), config.IpWhitelist);
 
             _logProvider?.Log("Saved configuration files.", LogLevel.Debug);
+        }
+
+        private string GetFile(string path)
+        {
+            return Path.Combine(_folder, path);
         }
 
         private HashSet<IPAddress> LoadList(string fileName)

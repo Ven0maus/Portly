@@ -30,14 +30,14 @@ namespace Portly.Infrastructure.Configuration
         /// <summary>
         /// Loads all configuration from disk.
         /// </summary>
-        public static ServerConfiguration Load(ISerializer? serializer = null, ILogProvider? logProvider = null)
-            => new ConfigurationService(serializer, logProvider).Load();
+        public static ServerConfiguration Load(ISerializer? serializer = null, ILogProvider? logProvider = null, string? folder = null)
+            => new ConfigurationService(serializer, logProvider, folder).Load();
 
         /// <summary>
         /// Saves all configuration to disk.
         /// </summary>
-        public void Save(ISerializer? serializer = null, ILogProvider? logProvider = null)
-            => new ConfigurationService(serializer, logProvider).Save(this);
+        public void Save(ISerializer? serializer = null, ILogProvider? logProvider = null, string? folder = null)
+            => new ConfigurationService(serializer, logProvider, folder).Save(this);
 
         /// <summary>
         /// Executes any validations on set values.

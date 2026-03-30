@@ -22,9 +22,9 @@ namespace Portly.IntegrationTests.Helpers
         private readonly Dictionary<Guid, IServerClient> _clientMap = [];
         private readonly TaskCompletionSource _startedTcs = new();
 
-        public TestServerHost()
+        public TestServerHost(string folder)
         {
-            Server = new PortlyServer();
+            Server = new PortlyServer(folder);
             Server.OnServerStarted += (_, _) => _startedTcs.TrySetResult();
             Server.OnPacketReceived += HandleReceivedPacket;
             Server.OnClientConnected += HandleClientConnection;

@@ -7,46 +7,54 @@ namespace Portly.IntegrationTests
     /// <summary>
     /// Basic server-client connection lifecycle tests
     /// </summary>
+    [Parallelizable(ParallelScope.All)]
     public class ConnectionLifecycleTests
     {
-        private static Mutex? _cleanupMutex;
         private const string _localHost = "127.0.0.1";
+        private readonly ConcurrentDictionary<string, (string serverDir, string clientDir)> _testDirectories = new();
+
+        private string ClientDirectory => _testDirectories[TestContext.CurrentContext.Test.ID].clientDir;
+        private string ServerDirectory => _testDirectories[TestContext.CurrentContext.Test.ID].serverDir;
+
+        [SetUp]
+        public async Task SetUp()
+        {
+            var test = TestContext.CurrentContext.Test.ID;
+            if (!_testDirectories.ContainsKey(test))
+            {
+                // Create new test directory
+                _testDirectories[test] = Tools.CreateIsolatedTestDirectories();
+            }
+        }
 
         [TearDown]
         public async Task TearDown()
         {
-            _cleanupMutex?.WaitOne();
-            try
+            // Cleanup test directory
+            var test = TestContext.CurrentContext.Test.ID;
+            if (_testDirectories.TryGetValue(test, out var dirs))
             {
-                Tools.CleanupServerSetup();
-                Tools.CleanupClientSetup();
+                var parent = new DirectoryInfo(dirs.serverDir).Parent!.FullName;
+                if (Directory.Exists(parent))
+                    Directory.Delete(parent, true);
             }
-            finally
-            {
-                _cleanupMutex?.ReleaseMutex();
-            }
-        }
-
-        [OneTimeSetUp]
-        public async Task OnetimeSetUp()
-        {
-            _cleanupMutex = new Mutex(false, "Portly_IntegrationTests_CleanupMutex");
         }
 
         [OneTimeTearDown]
-        public async Task OnetimeTearDown()
+        public async Task OneTimeTearDown()
         {
-            _cleanupMutex?.Dispose();
-            _cleanupMutex = null;
+            // Cleanup tests container directory
+            if (Directory.Exists("PortlyTests"))
+                Directory.Delete("PortlyTests", true);
         }
 
         [Test]
         public async Task Should_Connect_SendPacket_And_Disconnect()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var client = new TestClientHost();
+            await using var client = new TestClientHost(ClientDirectory);
 
             await client.ConnectAsync(_localHost, host.Port);
 
@@ -63,10 +71,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task MultipleClients_Should_Send_Independent_Packets()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var clients = new TestClientGroup(3);
+            await using var clients = new TestClientGroup(ClientDirectory, 3);
 
             await clients.ConnectAllAsync(_localHost, host.Port);
 
@@ -90,10 +98,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task EachClient_Should_Be_Mapped_To_Correct_ServerConnection()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var clients = new TestClientGroup(2);
+            await using var clients = new TestClientGroup(ClientDirectory, 2);
 
             await clients.ConnectAllAsync(_localHost, host.Port);
 
@@ -119,10 +127,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Server_Should_Broadcast_To_All_Clients()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var clients = new TestClientGroup(3);
+            await using var clients = new TestClientGroup(ClientDirectory, 3);
 
             await clients.ConnectAllAsync(_localHost, host.Port);
 
@@ -145,10 +153,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task MultipleClients_Should_Handle_Concurrent_Sends()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var clients = new TestClientGroup(5);
+            await using var clients = new TestClientGroup(ClientDirectory, 5);
 
             await clients.ConnectAllAsync(_localHost, host.Port);
 
@@ -173,10 +181,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Client_Should_Disconnect_Cleanly()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            var client = new TestClientHost();
+            var client = new TestClientHost(ClientDirectory);
 
             await client.ConnectAsync(_localHost, host.Port);
             await client.DisconnectAsync(host);
@@ -188,10 +196,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Packets_Should_Be_Received_In_Order_Per_Client()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            var client = new TestClientHost();
+            var client = new TestClientHost(ClientDirectory);
 
             await client.ConnectAsync(_localHost, host.Port);
 
@@ -216,18 +224,15 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task ChaosTest_MixedClientServerOperations()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            var clients = Enumerable.Range(0, 10)
-                .Select(_ => new TestClientHost())
-                .ToList();
+            var clients = new TestClientGroup(ClientDirectory, 10);
 
             var random = new Random(12345);
-
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var tasks = clients.Select(async client =>
+            var tasks = clients.Clients.Select(async client =>
             {
                 while (!cts.IsCancellationRequested)
                 {
@@ -295,13 +300,13 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Clients_Should_Receive_Exact_Number_Of_Packets()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
             const int clientCount = 5;
             const int packetsPerClient = 20;
 
-            await using var clients = new TestClientGroup(clientCount);
+            await using var clients = new TestClientGroup(ClientDirectory, clientCount);
 
             await clients.ConnectAllAsync(_localHost, host.Port);
 
@@ -348,10 +353,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Packets_Should_Maintain_Order_Under_Concurrent_Clients()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var clients = new TestClientGroup(5);
+            await using var clients = new TestClientGroup(ClientDirectory, 5);
             await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connections = clients.Clients
@@ -396,10 +401,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task Clients_Should_Handle_Frequent_Connect_Disconnect()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            await using var client = new TestClientHost();
+            await using var client = new TestClientHost(ClientDirectory);
 
             for (int i = 0; i < 20; i++)
             {
@@ -413,10 +418,10 @@ namespace Portly.IntegrationTests
         [Test]
         public async Task WaitForPacket_Should_Timeout_When_No_Packet()
         {
-            await using var host = new TestServerHost();
+            await using var host = new TestServerHost(ServerDirectory);
             await host.StartAsync();
 
-            var client = new TestClientHost();
+            var client = new TestClientHost(ClientDirectory);
             await client.ConnectAsync(_localHost, host.Port);
 
             var conn = host.GetServerConnection(client);

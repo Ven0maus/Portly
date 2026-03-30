@@ -15,9 +15,10 @@ namespace Portly.IntegrationTests.Helpers
         private readonly Dictionary<int, Queue<TaskCompletionSource<Packet>>> _waitersById = [];
         private readonly Dictionary<int, Queue<Packet>> _bufferedPackets = [];
 
-        public TestClientHost()
+        public TestClientHost(string folder)
         {
-            Client = new PortlyClient();
+            Directory.CreateDirectory(folder);
+            Client = new PortlyClient(folder);
             Client.OnPacketReceived += HandleReceivedPacket;
         }
 
