@@ -1,7 +1,6 @@
 ﻿using Portly.IntegrationTests.Helpers;
 using Portly.Protocol;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace Portly.IntegrationTests
 {
@@ -11,6 +10,7 @@ namespace Portly.IntegrationTests
     public class ConnectionLifecycleTests
     {
         private static Mutex? _cleanupMutex;
+        private const string _localHost = "127.0.0.1";
 
         [TearDown]
         public async Task TearDown()
@@ -48,7 +48,7 @@ namespace Portly.IntegrationTests
 
             await using var client = new TestClientHost();
 
-            await client.ConnectAsync("localhost", host.Port);
+            await client.ConnectAsync(_localHost, host.Port);
 
             var serverConnection = host.GetServerConnection(client);
             var receiveTask = host.WaitForPacketAsync<string>(serverConnection, PacketType.Custom);
@@ -68,7 +68,7 @@ namespace Portly.IntegrationTests
 
             await using var clients = new TestClientGroup(3);
 
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connections = clients.Clients
                 .Select(c => host.GetServerConnection(c))
@@ -95,7 +95,7 @@ namespace Portly.IntegrationTests
 
             await using var clients = new TestClientGroup(2);
 
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connA = host.GetServerConnection(clients.Clients[0]);
             var connB = host.GetServerConnection(clients.Clients[1]);
@@ -124,7 +124,7 @@ namespace Portly.IntegrationTests
 
             await using var clients = new TestClientGroup(3);
 
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             Assert.That(host.Server.ConnectedClients, Has.Count.EqualTo(clients.Clients.Count));
 
@@ -150,7 +150,7 @@ namespace Portly.IntegrationTests
 
             await using var clients = new TestClientGroup(5);
 
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connections = clients.Clients
                 .Select(c => host.GetServerConnection(c))
@@ -178,7 +178,7 @@ namespace Portly.IntegrationTests
 
             var client = new TestClientHost();
 
-            await client.ConnectAsync("localhost", host.Port);
+            await client.ConnectAsync(_localHost, host.Port);
 
             var conn = host.GetServerConnection(client);
 
@@ -198,7 +198,7 @@ namespace Portly.IntegrationTests
 
             var client = new TestClientHost();
 
-            await client.ConnectAsync("localhost", host.Port);
+            await client.ConnectAsync(_localHost, host.Port);
 
             var conn = host.GetServerConnection(client);
 
@@ -244,7 +244,7 @@ namespace Portly.IntegrationTests
                         {
                             case 0: // connect if not connected
                                 if (!client.Client.IsConnected)
-                                    await client.ConnectAsync("localhost", host.Port);
+                                    await client.ConnectAsync(_localHost, host.Port);
                                 break;
 
                             case 1: // send packet
@@ -264,7 +264,7 @@ namespace Portly.IntegrationTests
                             case 3: // reconnect
                                 if (!client.Client.IsConnected)
                                 {
-                                    await client.ConnectAsync("localhost", host.Port);
+                                    await client.ConnectAsync(_localHost, host.Port);
                                 }
                                 break;
                         }
@@ -308,7 +308,7 @@ namespace Portly.IntegrationTests
 
             await using var clients = new TestClientGroup(clientCount);
 
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connections = clients.Clients
                 .Select(c => host.GetServerConnection(c))
@@ -357,7 +357,7 @@ namespace Portly.IntegrationTests
             await host.StartAsync();
 
             await using var clients = new TestClientGroup(5);
-            await clients.ConnectAllAsync("localhost", host.Port);
+            await clients.ConnectAllAsync(_localHost, host.Port);
 
             var connections = clients.Clients
                 .Select(c => host.GetServerConnection(c))
@@ -405,13 +405,10 @@ namespace Portly.IntegrationTests
             await host.StartAsync();
 
             var client = new TestClientHost();
-            var sw = Stopwatch.StartNew();
 
             for (int i = 0; i < 20; i++)
             {
-                sw.Restart();
-                await client.ConnectAsync("localhost", host.Port);
-                TestContext.Progress.WriteLine($"Connect {i}: {sw.ElapsedMilliseconds} ms");
+                await client.ConnectAsync(_localHost, host.Port);
                 await client.Client.DisconnectAsync();
             }
 
@@ -425,7 +422,7 @@ namespace Portly.IntegrationTests
             await host.StartAsync();
 
             var client = new TestClientHost();
-            await client.ConnectAsync("localhost", host.Port);
+            await client.ConnectAsync(_localHost, host.Port);
 
             var conn = host.GetServerConnection(client);
 
