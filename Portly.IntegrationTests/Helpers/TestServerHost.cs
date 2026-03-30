@@ -57,7 +57,9 @@ namespace Portly.IntegrationTests.Helpers
         {
             lock (_lock)
             {
-                return _clientMap[client.Client.ServerClientId];
+                if (!_clientMap.TryGetValue(client.Client.ServerClientId, out var serverClient))
+                    throw new Exception($"No matching server client found on server with guid: {client.Client.ServerClientId}");
+                return serverClient;
             }
         }
 

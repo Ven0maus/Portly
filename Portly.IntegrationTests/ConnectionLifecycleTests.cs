@@ -179,12 +179,7 @@ namespace Portly.IntegrationTests
             var client = new TestClientHost();
 
             await client.ConnectAsync(_localHost, host.Port);
-
-            var conn = host.GetServerConnection(client);
-
-            var disconnectTask = host.WaitForClientDisconnectedAsync(conn);
-            await client.Client.DisconnectAsync();
-            await disconnectTask;
+            await client.DisconnectAsync(host);
 
             // Server should no longer consider it active
             Assert.That(host.Server.ConnectedClients, Is.Empty);
@@ -409,7 +404,7 @@ namespace Portly.IntegrationTests
             for (int i = 0; i < 20; i++)
             {
                 await client.ConnectAsync(_localHost, host.Port);
-                await client.Client.DisconnectAsync();
+                await client.DisconnectAsync(host);
             }
 
             Assert.That(host.Server.ConnectedClients, Is.Empty);

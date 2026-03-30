@@ -68,6 +68,15 @@ namespace Portly.IntegrationTests.Helpers
                 .WaitAsync(TimeSpan.FromSeconds(5));
         }
 
+        public async Task DisconnectAsync(TestServerHost serverHost)
+        {
+            var serverClient = serverHost.GetServerConnection(this);
+            var disconnectTask = serverHost.WaitForClientDisconnectedAsync(serverClient);
+
+            await Client.DisconnectAsync();
+            await disconnectTask;
+        }
+
         public async ValueTask DisposeAsync()
         {
             await Client.DisconnectAsync();
