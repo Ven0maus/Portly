@@ -12,10 +12,12 @@ namespace Portly.IntegrationTests.Helpers
     {
         public PortlyServer Server { get; }
         public Task ServerTask { get; private set; } = default!;
-        public int Port { get; }
+        public int Port { get; private set; }
 
         private readonly Lock _lock = new();
-        private readonly Dictionary<(IServerClient Client, int PacketId), Queue<TaskCompletionSource<Packet>>> _waiters = [];
+        private readonly Dictionary<(IServerClient Client, int PacketId), Queue<TaskCompletionSource<Packet>>> _receivePacketWaiters = [];
+        private readonly Dictionary<(IServerClient Client, int PacketId), Queue<Packet>> _packetBuffer = [];
+        private readonly Dictionary<Guid, TaskCompletionSource<IServerClient>> _disconnectWaiters = [];
         private readonly Dictionary<Guid, IServerClient> _clientMap = [];
         private readonly TaskCompletionSource _startedTcs = new();
 
@@ -25,11 +27,12 @@ namespace Portly.IntegrationTests.Helpers
             Server.OnServerStarted += (_, _) => _startedTcs.TrySetResult();
             Server.OnPacketReceived += HandleReceivedPacket;
             Server.OnClientConnected += HandleClientConnection;
-            Port = Tools.GetFreePort();
+            Server.OnClientDisconnected += HandleClientDisconnected;
         }
 
         public async Task StartAsync()
         {
+            Port = Tools.GetFreePort();
             ServerTask = Server.StartAsync(port: Port);
             await _startedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
@@ -61,16 +64,25 @@ namespace Portly.IntegrationTests.Helpers
         {
             var packetId = ((PacketIdentifier)identifier).Id;
 
-            var tcs = new TaskCompletionSource<Packet>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<Packet> tcs;
 
             lock (_lock)
             {
                 var key = (client, packetId);
 
-                if (!_waiters.TryGetValue(key, out var queue))
+                // If packet already arrived, consume it immediately
+                if (_packetBuffer.TryGetValue(key, out var buffer) &&
+                    buffer.Count > 0)
+                {
+                    return buffer.Dequeue();
+                }
+
+                tcs = new TaskCompletionSource<Packet>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                if (!_receivePacketWaiters.TryGetValue(key, out var queue))
                 {
                     queue = new Queue<TaskCompletionSource<Packet>>();
-                    _waiters[key] = queue;
+                    _receivePacketWaiters[key] = queue;
                 }
 
                 queue.Enqueue(tcs);
@@ -85,6 +97,18 @@ namespace Portly.IntegrationTests.Helpers
             return packet.As<T>().Payload;
         }
 
+        public async Task<IServerClient> WaitForClientDisconnectedAsync(IServerClient client)
+        {
+            var tcs = new TaskCompletionSource<IServerClient>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            lock (_lock)
+            {
+                _disconnectWaiters[client.Id] = tcs;
+            }
+
+            return await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
         public async ValueTask DisposeAsync()
         {
             await Server.StopAsync();
@@ -95,27 +119,52 @@ namespace Portly.IntegrationTests.Helpers
         private void HandleReceivedPacket(IServerClient conn, Packet packet)
         {
             TaskCompletionSource<Packet>? waiter = null;
-
             var key = (conn, packet.Identifier.Id);
 
             lock (_lock)
             {
-                if (_waiters.TryGetValue(key, out var queue) &&
+                if (_receivePacketWaiters.TryGetValue(key, out var queue) &&
                     queue.Count > 0)
                 {
                     waiter = queue.Dequeue();
+                }
+                else
+                {
+                    if (!_packetBuffer.TryGetValue(key, out var buffer))
+                    {
+                        buffer = new Queue<Packet>();
+                        _packetBuffer[key] = buffer;
+                    }
+
+                    buffer.Enqueue(packet);
+                    return;
                 }
             }
 
             waiter?.TrySetResult(packet);
         }
 
-        private void HandleClientConnection(object? sender, IServerClient e)
+        private void HandleClientConnection(object? sender, IServerClient client)
         {
             lock (_lock)
             {
-                _clientMap[e.Id] = e;
+                _clientMap[client.Id] = client;
             }
+        }
+
+        private void HandleClientDisconnected(object? sender, IServerClient client)
+        {
+            TaskCompletionSource<IServerClient>? waiter;
+
+            lock (_lock)
+            {
+                if (_disconnectWaiters.TryGetValue(client.Id, out waiter))
+                {
+                    _disconnectWaiters.Remove(client.Id);
+                }
+            }
+
+            waiter?.TrySetResult(client);
         }
     }
 }

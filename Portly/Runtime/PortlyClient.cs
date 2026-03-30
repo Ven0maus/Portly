@@ -413,7 +413,7 @@ namespace Portly.Runtime
 
             var publicKey = publicKeyPacket.Payload;
 
-            if (!_trustClient.VerifyOrTrustServer(host, port, publicKey))
+            if (!await _trustClient.VerifyOrTrustServer(host, port, publicKey))
                 throw new Exception("Server identity verification failed.");
 
             using var keyExchange = new EncryptionKeyExchange();

@@ -12,7 +12,8 @@ namespace Portly.IntegrationTests.Helpers
         public PortlyClient Client { get; }
 
         private readonly Lock _lock = new();
-        private readonly Dictionary<int, Queue<TaskCompletionSource<Packet>>> _waitersById = new();
+        private readonly Dictionary<int, Queue<TaskCompletionSource<Packet>>> _waitersById = [];
+        private readonly Dictionary<int, Queue<Packet>> _bufferedPackets = [];
 
         public TestClientHost()
         {
@@ -23,11 +24,20 @@ namespace Portly.IntegrationTests.Helpers
         public async Task<Packet> WaitForPacketAsync(Enum identifier)
         {
             var packetId = ((PacketIdentifier)identifier).Id;
-
-            var tcs = new TaskCompletionSource<Packet>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<Packet> tcs;
 
             lock (_lock)
             {
+                // If packet already arrived, consume it immediately
+                if (_bufferedPackets.TryGetValue(packetId, out var buffer) &&
+                    buffer.Count > 0)
+                {
+                    var packet = buffer.Dequeue();
+                    return packet;
+                }
+
+                tcs = new TaskCompletionSource<Packet>(TaskCreationOptions.RunContinuationsAsynchronously);
+
                 if (!_waitersById.TryGetValue(packetId, out var queue))
                 {
                     queue = new Queue<TaskCompletionSource<Packet>>();
@@ -66,7 +76,6 @@ namespace Portly.IntegrationTests.Helpers
         private void HandleReceivedPacket(object? sender, Packet packet)
         {
             TaskCompletionSource<Packet>? waiter = null;
-
             var id = packet.Identifier.Id;
 
             lock (_lock)
@@ -75,6 +84,17 @@ namespace Portly.IntegrationTests.Helpers
                     queue.Count > 0)
                 {
                     waiter = queue.Dequeue();
+                }
+                else
+                {
+                    if (!_bufferedPackets.TryGetValue(id, out var buffer))
+                    {
+                        buffer = new Queue<Packet>();
+                        _bufferedPackets[id] = buffer;
+                    }
+
+                    buffer.Enqueue(packet);
+                    return;
                 }
             }
 

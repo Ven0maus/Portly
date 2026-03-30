@@ -309,6 +309,7 @@ namespace Portly.Runtime
         private void OnClientDisconnectedImpl(object? sender, IServerClient connection)
         {
             DecrementConnection(connection.IpAddress);
+            _clients.Remove(connection.Id, out _);
             OnClientDisconnected?.Invoke(sender, connection);
         }
 

@@ -20,5 +20,18 @@ namespace Portly.IntegrationTests.Helpers
             listener.Stop();
             return port;
         }
+
+        internal static void CleanupClientSetup()
+        {
+            File.Delete("known_servers.json");
+        }
+
+        internal static void CleanupServerSetup()
+        {
+            File.Delete("server_key.json");
+            File.Delete("server_config.xml");
+            File.Delete("ip-blacklist.txt");
+            File.Delete("ip-whitelist.txt");
+        }
     }
 }

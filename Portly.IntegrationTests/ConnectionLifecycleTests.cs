@@ -8,6 +8,36 @@ namespace Portly.IntegrationTests
     /// </summary>
     public class ConnectionLifecycleTests
     {
+        private static Mutex? _cleanupMutex;
+
+        [TearDown]
+        public async Task TearDown()
+        {
+            _cleanupMutex?.WaitOne();
+            try
+            {
+                Tools.CleanupServerSetup();
+                Tools.CleanupClientSetup();
+            }
+            finally
+            {
+                _cleanupMutex?.ReleaseMutex();
+            }
+        }
+
+        [OneTimeSetUp]
+        public async Task OnetimeSetUp()
+        {
+            _cleanupMutex = new Mutex(false, "Portly_IntegrationTests_CleanupMutex");
+        }
+
+        [OneTimeTearDown]
+        public async Task OnetimeTearDown()
+        {
+            _cleanupMutex?.Dispose();
+            _cleanupMutex = null;
+        }
+
         [Test]
         public async Task Should_Connect_SendPacket_And_Disconnect()
         {
@@ -94,6 +124,8 @@ namespace Portly.IntegrationTests
 
             await clients.ConnectAllAsync("localhost", host.Port);
 
+            Assert.That(host.Server.ConnectedClients, Has.Count.EqualTo(clients.Clients.Count));
+
             var receiveTasks = clients.Clients.Select(c =>
                 c.WaitForPacketAsync<string>(PacketType.Custom));
 
@@ -148,7 +180,9 @@ namespace Portly.IntegrationTests
 
             var conn = host.GetServerConnection(client);
 
+            var disconnectTask = host.WaitForClientDisconnectedAsync(conn);
             await client.Client.DisconnectAsync();
+            await disconnectTask;
 
             // Server should no longer consider it active
             Assert.That(host.Server.ConnectedClients, Is.Empty);
