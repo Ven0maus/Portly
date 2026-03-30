@@ -1,5 +1,6 @@
 ﻿using Portly.IntegrationTests.Helpers;
 using Portly.Protocol;
+using System.Collections.Concurrent;
 
 namespace Portly.IntegrationTests
 {
@@ -226,7 +227,7 @@ namespace Portly.IntegrationTests
                 .Select(_ => new TestClientHost())
                 .ToList();
 
-            var random = new Random();
+            var random = new Random(12345);
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
@@ -292,6 +293,59 @@ namespace Portly.IntegrationTests
 
                 // Server should not crash or lose internal consistency
                 Assert.That(host.Server.ConnectedClients, Has.Count.GreaterThanOrEqualTo(0));
+            }
+        }
+
+        [Test]
+        public async Task Clients_Should_Receive_Exact_Number_Of_Packets()
+        {
+            await using var host = new TestServerHost();
+            await host.StartAsync();
+
+            const int clientCount = 5;
+            const int packetsPerClient = 20;
+
+            await using var clients = new TestClientGroup(clientCount);
+
+            await clients.ConnectAllAsync("localhost", host.Port);
+
+            var connections = clients.Clients
+                .Select(c => host.GetServerConnection(c))
+                .ToList();
+
+            // Track received packets per client
+            var receivedCounts = new ConcurrentDictionary<int, int>();
+
+            var receiveTasks = clients.Clients.Select(async (client, index) =>
+            {
+                for (int i = 0; i < packetsPerClient; i++)
+                {
+                    await client.WaitForPacketAsync<string>(PacketType.Custom);
+
+                    receivedCounts.AddOrUpdate(index, 1, (_, count) => count + 1);
+                }
+            });
+
+            // Send packets to each client
+            foreach (var conn in connections)
+            {
+                for (int i = 0; i < packetsPerClient; i++)
+                {
+                    await host.SendAsync(conn, Packet.Create(PacketType.Custom, $"msg-{i}"), false);
+                }
+            }
+
+            await Task.WhenAll(receiveTasks);
+
+            // Assertions
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(receivedCounts.Count, Is.EqualTo(clientCount));
+
+                foreach (var kvp in receivedCounts)
+                {
+                    Assert.That(kvp.Value, Is.EqualTo(packetsPerClient));
+                }
             }
         }
     }
