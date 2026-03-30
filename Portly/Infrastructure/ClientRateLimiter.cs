@@ -7,15 +7,11 @@ namespace Portly.Infrastructure
     /// </summary>
     internal sealed class ClientRateLimiter
     {
-        private readonly double _packetsPerSecond;
-        private readonly double _maxPacketBurst;
         private double _availablePackets;
-
-        private readonly double _bytesPerSecond;
-        private readonly double _maxByteBurst;
         private double _availableBytes;
-
         private long _lastRefillTicks;
+
+        private readonly RateLimitSettings _rateLimitSettings;
 
         public ClientRateLimiter(RateLimitSettings rateLimitSettings)
         {
@@ -24,14 +20,7 @@ namespace Portly.Infrastructure
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rateLimitSettings.MaxBytesPerSecond);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rateLimitSettings.MaxBytesPerBurst);
 
-            _packetsPerSecond = rateLimitSettings.MaxPacketsPerSecond;
-            _maxPacketBurst = rateLimitSettings.MaxPacketsPerBurst;
-            _availablePackets = rateLimitSettings.MaxPacketsPerBurst;
-
-            _bytesPerSecond = rateLimitSettings.MaxBytesPerSecond;
-            _maxByteBurst = rateLimitSettings.MaxBytesPerBurst;
-            _availableBytes = rateLimitSettings.MaxBytesPerBurst;
-
+            _rateLimitSettings = rateLimitSettings;
             _lastRefillTicks = DateTime.UtcNow.Ticks;
         }
 
@@ -61,8 +50,8 @@ namespace Portly.Infrastructure
 
             if (elapsedSec <= 0) return;
 
-            _availablePackets = Math.Min(_maxPacketBurst, _availablePackets + elapsedSec * _packetsPerSecond);
-            _availableBytes = Math.Min(_maxByteBurst, _availableBytes + elapsedSec * _bytesPerSecond);
+            _availablePackets = Math.Min(_rateLimitSettings.MaxPacketsPerBurst, _availablePackets + elapsedSec * _rateLimitSettings.MaxPacketsPerSecond);
+            _availableBytes = Math.Min(_rateLimitSettings.MaxBytesPerBurst, _availableBytes + elapsedSec * _rateLimitSettings.MaxBytesPerSecond);
         }
     }
 }
