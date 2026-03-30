@@ -8,6 +8,8 @@ namespace Portly.Security.Trust
     /// </summary>
     internal class TrustServer
     {
+        // TODO: Make this injectable/changeable so tests can store in their own directories
+        // Ideally this would be a directory that can be defined in the top scope, and all files go there not just the trust files.
         private const string KEY_STORAGE_PATH = "server_key.json";
         private readonly ECDsa _keyPair;
         private readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
