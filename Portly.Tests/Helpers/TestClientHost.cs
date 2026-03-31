@@ -107,8 +107,7 @@ namespace Portly.Tests.Helpers
         {
             if (!Client.IsConnected) return;
 
-            var serverClient = serverHost.GetServerConnection(this);
-            var disconnectTask = serverHost.WaitForClientDisconnectedAsync(serverClient);
+            var disconnectTask = serverHost.WaitForClientDisconnectedAsync(this);
 
             await Client.DisconnectAsync();
             await disconnectTask;

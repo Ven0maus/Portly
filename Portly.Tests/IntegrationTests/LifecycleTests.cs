@@ -20,8 +20,7 @@ namespace Portly.Tests.IntegrationTests
 
             await client.ConnectAsync(LocalHost, host.Port, host);
 
-            var serverConnection = host.GetServerConnection(client);
-            var receiveTask = host.WaitForPacketAsync<string>(serverConnection, PacketType.Custom);
+            var receiveTask = host.WaitForPacketAsync<string>(client, PacketType.Custom);
 
             await client.SendAsync(Packet.Create(PacketType.Custom, "hello"));
 
@@ -40,12 +39,8 @@ namespace Portly.Tests.IntegrationTests
 
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var connections = clients.Clients
-                .Select(c => host.GetServerConnection(c))
-                .ToList();
-
-            var receiveTasks = connections.Select(conn =>
-                host.WaitForPacketAsync<string>(conn, PacketType.Custom))
+            var receiveTasks = clients.Clients.Select(client =>
+                host.WaitForPacketAsync<string>(client, PacketType.Custom))
                 .ToList();
 
             await clients.SendAllAsync(i =>
@@ -67,11 +62,8 @@ namespace Portly.Tests.IntegrationTests
 
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var connA = host.GetServerConnection(clients.Clients[0]);
-            var connB = host.GetServerConnection(clients.Clients[1]);
-
-            var taskA = host.WaitForPacketAsync<string>(connA, PacketType.Custom);
-            var taskB = host.WaitForPacketAsync<string>(connB, PacketType.Custom);
+            var taskA = host.WaitForPacketAsync<string>(clients.Clients[0], PacketType.Custom);
+            var taskB = host.WaitForPacketAsync<string>(clients.Clients[1], PacketType.Custom);
 
             await clients.Clients[0].SendAsync(Packet.Create(PacketType.Custom, "A"));
             await clients.Clients[1].SendAsync(Packet.Create(PacketType.Custom, "B"));
@@ -122,12 +114,8 @@ namespace Portly.Tests.IntegrationTests
 
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var connections = clients.Clients
-                .Select(c => host.GetServerConnection(c))
-                .ToList();
-
-            var receiveTasks = connections.Select(conn =>
-                host.WaitForPacketAsync<string>(conn, PacketType.Custom))
+            var receiveTasks = clients.Clients.Select(client =>
+                host.WaitForPacketAsync<string>(client, PacketType.Custom))
                 .ToList();
 
             var sendTasks = clients.Clients.Select((c, i) =>
@@ -165,10 +153,8 @@ namespace Portly.Tests.IntegrationTests
 
             await client.ConnectAsync(LocalHost, host.Port, host);
 
-            var conn = host.GetServerConnection(client);
-
-            var receive1 = host.WaitForPacketAsync<string>(conn, PacketType.Custom);
-            var receive2 = host.WaitForPacketAsync<string>(conn, PacketType.Custom);
+            var receive1 = host.WaitForPacketAsync<string>(client, PacketType.Custom);
+            var receive2 = host.WaitForPacketAsync<string>(client, PacketType.Custom);
 
             await client.SendAsync(Packet.Create(PacketType.Custom, "1"));
             await client.SendAsync(Packet.Create(PacketType.Custom, "2"));
@@ -196,10 +182,6 @@ namespace Portly.Tests.IntegrationTests
 
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var connections = clients.Clients
-                .Select(c => host.GetServerConnection(c))
-                .ToList();
-
             // Track received packets per client
             var receivedCounts = new ConcurrentDictionary<int, int>();
 
@@ -214,11 +196,11 @@ namespace Portly.Tests.IntegrationTests
             });
 
             // Send packets to each client
-            foreach (var conn in connections)
+            foreach (var client in clients.Clients)
             {
                 for (int i = 0; i < packetsPerClient; i++)
                 {
-                    await host.SendAsync(conn, Packet.Create(PacketType.Custom, $"msg-{i}"), false);
+                    await host.SendAsync(client, Packet.Create(PacketType.Custom, $"msg-{i}"), false);
                 }
             }
 
@@ -252,10 +234,6 @@ namespace Portly.Tests.IntegrationTests
             await using var clients = new TestClientGroup(ClientDirectory, 5);
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var connections = clients.Clients
-                .Select(c => host.GetServerConnection(c))
-                .ToList();
-
             // Concurrent sends with interleaving
             var sendTasks = clients.Clients.Select((c, ci) =>
                 Task.Run(async () =>
@@ -268,14 +246,14 @@ namespace Portly.Tests.IntegrationTests
 
             await Task.WhenAll(sendTasks);
 
-            var receiveTasks = connections.Select(conn =>
+            var receiveTasks = clients.Clients.Select(client =>
                 Task.Run(async () =>
                 {
                     var list = new List<int>();
 
                     for (int i = 0; i < 10; i++)
                     {
-                        var msg = await host.WaitForPacketAsync<string>(conn, PacketType.Custom);
+                        var msg = await host.WaitForPacketAsync<string>(client, PacketType.Custom);
                         list.Add(int.Parse(msg));
                     }
 

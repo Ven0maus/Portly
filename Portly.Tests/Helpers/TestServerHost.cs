@@ -37,6 +37,11 @@ namespace Portly.Tests.Helpers
             Port = ((IPEndPoint)Server.LocalEndpoint!).Port;
         }
 
+        public async Task SendAsync(TestClientHost client, Packet packet, bool encrypt)
+        {
+            await SendAsync(GetServerConnection(client), packet, encrypt);
+        }
+
         public async Task SendAsync(IServerClient client, Packet packet, bool encrypt)
         {
             await Server.SendToClientAsync(client, packet, encrypt);
@@ -47,18 +52,11 @@ namespace Portly.Tests.Helpers
             await Server.SendToClientsAsync(packet, encrypt);
         }
 
-        public IServerClient GetServerConnection(TestClientHost client)
+        public async Task<Packet> WaitForPacketAsync(TestClientHost client, Enum identifier)
         {
-            if (!_clientMap.TryGetValue(client.Client.ServerClientId, out var serverClient))
-                throw new Exception($"No matching server client found on server with guid: {client.Client.ServerClientId}");
-
-            return serverClient;
-        }
-
-        public async Task<Packet> WaitForPacketAsync(IServerClient client, Enum identifier)
-        {
+            var conn = GetServerConnection(client);
             var packetId = ((PacketIdentifier)identifier).Id;
-            var clientId = client.Id;
+            var clientId = conn.Id;
 
             var clientWaiters = _receivePacketWaiters.GetOrAdd(clientId, _ => new ConcurrentDictionary<int, Queue<TaskCompletionSource<Packet>>>());
             var clientBuffers = _packetBuffer.GetOrAdd(clientId, _ => new ConcurrentDictionary<int, Queue<Packet>>());
@@ -116,7 +114,7 @@ namespace Portly.Tests.Helpers
             }
         }
 
-        public async Task<T> WaitForPacketAsync<T>(IServerClient client, Enum identifier)
+        public async Task<T> WaitForPacketAsync<T>(TestClientHost client, Enum identifier)
         {
             var packet = await WaitForPacketAsync(client, identifier);
             return packet.As<T>().Payload;
@@ -143,23 +141,24 @@ namespace Portly.Tests.Helpers
             return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
-        public Task<IServerClient> WaitForClientDisconnectedAsync(IServerClient client)
+        public async Task WaitForClientDisconnectedAsync(TestClientHost client)
         {
-            if (!_clientMap.ContainsKey(client.Id))
-                return Task.FromResult(client);
+            var conn = GetServerConnection(client);
+            if (!_clientMap.ContainsKey(conn.Id))
+                return;
 
             var tcs = new TaskCompletionSource<IServerClient>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _disconnectWaiters[client.Id] = tcs;
+            _disconnectWaiters[conn.Id] = tcs;
 
-            if (!_clientMap.ContainsKey(client.Id))
+            if (!_clientMap.ContainsKey(conn.Id))
             {
-                if (_disconnectWaiters.TryRemove(client.Id, out var removed))
-                    removed.TrySetResult(client);
+                if (_disconnectWaiters.TryRemove(conn.Id, out var removed))
+                    removed.TrySetResult(conn);
 
-                return Task.FromResult(client);
+                return;
             }
 
-            return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
         public async ValueTask DisposeAsync()
@@ -234,6 +233,14 @@ namespace Portly.Tests.Helpers
 
             // Clear buffers
             _packetBuffer.TryRemove(client.Id, out _);
+        }
+
+        private IServerClient GetServerConnection(TestClientHost client)
+        {
+            if (!_clientMap.TryGetValue(client.Client.ServerClientId, out var serverClient))
+                throw new Exception($"No matching server client found on server with guid: {client.Client.ServerClientId}");
+
+            return serverClient;
         }
     }
 }
