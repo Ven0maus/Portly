@@ -152,7 +152,6 @@ namespace Portly.Runtime
 
         private void RegisterPredefinedRoutes()
         {
-            Router.Register(PacketType.KeepAlive, null);
             Router.Register(PacketType.Disconnect, async (client, packet) => await client.DisconnectAsync(informClient: false));
         }
 
