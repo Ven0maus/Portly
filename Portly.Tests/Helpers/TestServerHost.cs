@@ -20,6 +20,7 @@ namespace Portly.Tests.Helpers
         private readonly ConcurrentDictionary<(IServerClient Client, int PacketId), Queue<TaskCompletionSource<Packet>>> _receivePacketWaiters = [];
         private readonly ConcurrentDictionary<(IServerClient Client, int PacketId), Queue<Packet>> _packetBuffer = [];
         private readonly ConcurrentDictionary<Guid, TaskCompletionSource<IServerClient>> _disconnectWaiters = [];
+        private readonly ConcurrentDictionary<Guid, TaskCompletionSource<IServerClient>> _connectWaiters = new();
         private readonly ConcurrentDictionary<Guid, IServerClient> _clientMap = [];
         private readonly TaskCompletionSource _startedTcs = new();
 
@@ -129,13 +130,52 @@ namespace Portly.Tests.Helpers
             return packet.As<T>().Payload;
         }
 
-        public async Task<IServerClient> WaitForClientDisconnectedAsync(IServerClient client)
+        public Task<IServerClient> WaitForClientConnectedAsync(TestClientHost client)
         {
+            var clientId = client.Client.ServerClientId;
+            if (_clientMap.TryGetValue(clientId, out var existing))
+                return Task.FromResult(existing);
+
+            var tcs = new TaskCompletionSource<IServerClient>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _connectWaiters[clientId] = tcs;
+
+            // Re-check after registration
+            if (_clientMap.TryGetValue(clientId, out existing))
+            {
+                if (_connectWaiters.TryRemove(clientId, out var waiter))
+                    waiter.TrySetResult(existing);
+
+                return Task.FromResult(existing);
+            }
+
+            return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        public Task<IServerClient> WaitForClientDisconnectedAsync(IServerClient client)
+        {
+            // 1. Fast path: already disconnected
+            if (!_clientMap.ContainsKey(client.Id))
+            {
+                return Task.FromResult(client);
+            }
+
             var tcs = new TaskCompletionSource<IServerClient>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _disconnectWaiters[client.Id] = tcs;
 
-            return await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // 2. Re-check after registering waiter (avoid missed signal)
+            if (!_clientMap.ContainsKey(client.Id))
+            {
+                if (_disconnectWaiters.TryRemove(client.Id, out var removed))
+                {
+                    removed.TrySetResult(client);
+                }
+
+                return Task.FromResult(client);
+            }
+
+            return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
         public async ValueTask DisposeAsync()
@@ -179,6 +219,11 @@ namespace Portly.Tests.Helpers
         private void HandleClientConnection(object? sender, IServerClient client)
         {
             _clientMap[client.Id] = client;
+
+            if (_connectWaiters.TryRemove(client.Id, out var tcs))
+            {
+                tcs.TrySetResult(client);
+            }
         }
 
         private void HandleClientDisconnected(object? sender, IServerClient client)

@@ -86,12 +86,13 @@ namespace Portly.Tests.Helpers
             return packet.As<T>().Payload;
         }
 
-        public async Task ConnectAsync(string host, int port, int? timeout = null)
+        public async Task ConnectAsync(string host, int port, TestServerHost serverHost, int? timeout = null)
         {
             if (Client.IsConnected) return;
 
             await Client.ConnectAsync(host, port)
                 .WaitAsync(TimeSpan.FromSeconds(timeout ?? 5));
+            await serverHost.WaitForClientConnectedAsync(this);
         }
 
         public async Task SendAsync(Packet packet, int? timeout = null)

@@ -16,6 +16,7 @@ namespace Portly.Infrastructure
             public DateTime LastViolation;
         }
 
+        private readonly Lock _bucketLock = new();
         private readonly ConcurrentDictionary<IPAddress, RateLimitState> _rateLimitStates = new();
 
         private const int MaxViolations = 5;
@@ -40,6 +41,10 @@ namespace Portly.Infrastructure
 
             _logProvider = logProvider;
             _serverConfiguration = configuration;
+
+            // Set defaults
+            _availablePackets = rateLimitSettings.MaxPacketsPerBurst;
+            _availableBytes = rateLimitSettings.MaxBytesPerBurst;
             _lastRefillTicks = DateTime.UtcNow.Ticks;
         }
 
@@ -50,30 +55,39 @@ namespace Portly.Infrastructure
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
 
-            Refill();
-
-            if (_availablePackets >= 1 && _availableBytes >= bytes)
+            lock (_bucketLock)
             {
-                _availablePackets -= 1;
-                _availableBytes -= bytes;
-                banned = false;
-                return true;
+                Refill();
+
+                if (_availablePackets >= 1 && _availableBytes >= bytes)
+                {
+                    _availablePackets -= 1;
+                    _availableBytes -= bytes;
+                    banned = false;
+                    return true;
+                }
             }
 
             banned = RegisterViolation(ip);
-
             return false;
         }
 
         private void Refill()
         {
             var nowTicks = DateTime.UtcNow.Ticks;
-            var elapsedSec = (nowTicks - Interlocked.Exchange(ref _lastRefillTicks, nowTicks)) / (double)TimeSpan.TicksPerSecond;
+            var elapsedSec = (nowTicks - _lastRefillTicks) / (double)TimeSpan.TicksPerSecond;
 
             if (elapsedSec <= 0) return;
 
-            _availablePackets = Math.Min(_serverConfiguration.RateLimits.MaxPacketsPerBurst, _availablePackets + elapsedSec * _serverConfiguration.RateLimits.MaxPacketsPerSecond);
-            _availableBytes = Math.Min(_serverConfiguration.RateLimits.MaxBytesPerBurst, _availableBytes + elapsedSec * _serverConfiguration.RateLimits.MaxBytesPerSecond);
+            _lastRefillTicks = nowTicks;
+
+            _availablePackets = Math.Min(
+                _serverConfiguration.RateLimits.MaxPacketsPerBurst,
+                _availablePackets + elapsedSec * _serverConfiguration.RateLimits.MaxPacketsPerSecond);
+
+            _availableBytes = Math.Min(
+                _serverConfiguration.RateLimits.MaxBytesPerBurst,
+                _availableBytes + elapsedSec * _serverConfiguration.RateLimits.MaxBytesPerSecond);
         }
 
         private void BanIp(IPAddress ip, TimeSpan duration)

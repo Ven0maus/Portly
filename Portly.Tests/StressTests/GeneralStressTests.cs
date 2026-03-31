@@ -29,7 +29,7 @@ namespace Portly.Tests.StressTests
                         {
                             case 0: // connect if not connected
                                 if (!client.Client.IsConnected)
-                                    await client.ConnectAsync(LocalHost, host.Port);
+                                    await client.ConnectAsync(LocalHost, host.Port, host);
                                 break;
 
                             case 1: // send packet
@@ -49,7 +49,7 @@ namespace Portly.Tests.StressTests
                             case 3: // reconnect
                                 if (!client.Client.IsConnected)
                                 {
-                                    await client.ConnectAsync(LocalHost, host.Port);
+                                    await client.ConnectAsync(LocalHost, host.Port, host);
                                 }
                                 break;
                         }
@@ -103,7 +103,7 @@ namespace Portly.Tests.StressTests
             var random = new Random(42);
 
             foreach (var client in clients.Clients)
-                await client.ConnectAsync(LocalHost, host.Port);
+                await client.ConnectAsync(LocalHost, host.Port, host);
 
             await Task.Delay(200);
 
@@ -152,7 +152,7 @@ namespace Portly.Tests.StressTests
                     {
                         if (!client.Client.IsConnected)
                         {
-                            await client.ConnectAsync(LocalHost, host.Port);
+                            await client.ConnectAsync(LocalHost, host.Port, host);
                         }
                         else
                         {
@@ -198,7 +198,7 @@ namespace Portly.Tests.StressTests
             await using var clients = new TestClientGroup(ClientDirectory, 15);
 
             foreach (var client in clients.Clients)
-                await client.ConnectAsync(LocalHost, host.Port);
+                await client.ConnectAsync(LocalHost, host.Port, host);
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
@@ -233,7 +233,7 @@ namespace Portly.Tests.StressTests
             {
                 await using var client = new TestClientHost(ClientDirectory);
 
-                await client.ConnectAsync(LocalHost, host.Port);
+                await client.ConnectAsync(LocalHost, host.Port, host);
 
                 await client.SendAsync(Packet.Create(PacketType.Custom, $"msg-{i}"));
 
@@ -257,7 +257,7 @@ namespace Portly.Tests.StressTests
             await using var clients = new TestClientGroup(ClientDirectory, 50);
 
             var tasks = clients.Clients.Select(client =>
-                client.ConnectAsync(LocalHost, host.Port));
+                client.ConnectAsync(LocalHost, host.Port, host));
 
             await Task.WhenAll(tasks);
 
@@ -279,7 +279,7 @@ namespace Portly.Tests.StressTests
                 for (int i = 0; i < maxPerIp; i++)
                 {
                     var client = new TestClientHost(ClientDirectory);
-                    await client.ConnectAsync(LocalHost, host.Port);
+                    await client.ConnectAsync(LocalHost, host.Port, host);
                     clients.Add(client);
                 }
 
@@ -291,7 +291,7 @@ namespace Portly.Tests.StressTests
 
                 try
                 {
-                    await extraClient.ConnectAsync(LocalHost, host.Port);
+                    await extraClient.ConnectAsync(LocalHost, host.Port, host);
                 }
                 catch
                 { }

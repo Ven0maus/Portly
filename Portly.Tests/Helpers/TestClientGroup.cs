@@ -19,9 +19,9 @@ namespace Portly.Tests.Helpers
                 Clients.Add(new TestClientHost($"{folder}_{i}"));
         }
 
-        public async Task ConnectAllAsync(string host, int port)
+        public async Task ConnectAllAsync(string host, int port, TestServerHost serverHost)
         {
-            await Task.WhenAll(Clients.Select(c => c.ConnectAsync(host, port)))
+            await Task.WhenAll(Clients.Select(c => c.ConnectAsync(host, port, serverHost)))
                 .WaitAsync(_timeout);
 
             // Build lookup

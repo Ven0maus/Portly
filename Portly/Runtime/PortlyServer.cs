@@ -357,7 +357,7 @@ namespace Portly.Runtime
 
         private async Task HandleClientAsync(ITransportConnection client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(_packetProtocol.Invoke(), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl);
+            var connection = new ServerClient(_packetProtocol.Invoke(), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl, _logProvider);
             _clients[connection.Id] = connection;
 
             _logProvider?.Log($"[{connection.Id}]: Connecting to server..");

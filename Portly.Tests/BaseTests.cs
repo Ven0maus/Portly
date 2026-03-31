@@ -45,13 +45,5 @@ namespace Portly.Tests
                     Directory.Delete(parent, true);
             }
         }
-
-        [OneTimeTearDown]
-        public async Task OneTimeTearDown()
-        {
-            // Cleanup tests container directory
-            if (Directory.Exists("PortlyTests"))
-                Directory.Delete("PortlyTests", true);
-        }
     }
 }

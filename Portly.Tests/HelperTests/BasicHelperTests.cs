@@ -15,7 +15,7 @@ namespace Portly.Tests.HelperTests
             await host.StartAsync();
 
             var client = new TestClientHost(ClientDirectory);
-            await client.ConnectAsync(LocalHost, host.Port);
+            await client.ConnectAsync(LocalHost, host.Port, host);
 
             var conn = host.GetServerConnection(client);
             var task = host.WaitForPacketAsync<string>(conn, PacketType.Custom);
