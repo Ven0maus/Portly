@@ -1,6 +1,7 @@
 ﻿using Portly.Abstractions;
 using Portly.Infrastructure.Configuration.Serializers;
 using Portly.Infrastructure.Configuration.Settings;
+using System.Collections.Concurrent;
 using System.Net;
 
 namespace Portly.Infrastructure.Configuration
@@ -10,6 +11,12 @@ namespace Portly.Infrastructure.Configuration
     /// </summary>
     public sealed class ServerConfiguration
     {
+        private readonly Lock _lock = new Lock();
+
+        /// <summary>
+        /// Folder where the configuration is contained.
+        /// </summary>
+        public string? Folder { get; init; }
         /// <summary>
         /// Connection configuration options.
         /// </summary>
@@ -21,7 +28,7 @@ namespace Portly.Infrastructure.Configuration
         /// <summary>
         /// List of ips to be blocked on connection.
         /// </summary>
-        public HashSet<IPAddress> IpBlacklist { get; set; } = new();
+        public ConcurrentDictionary<IPAddress, DateTime> IpBlacklist { get; set; } = new();
         /// <summary>
         /// Lists of ips to be exclusively allowed in the server, any others are denied on connection.
         /// </summary>
@@ -36,8 +43,13 @@ namespace Portly.Infrastructure.Configuration
         /// <summary>
         /// Saves all configuration to disk.
         /// </summary>
-        public void Save(ISerializer? serializer = null, ILogProvider? logProvider = null, string? folder = null)
-            => new ConfigurationService(serializer, logProvider, folder).Save(this);
+        public void Save(ISerializer? serializer = null, ILogProvider? logProvider = null)
+        {
+            lock (_lock)
+            {
+                new ConfigurationService(serializer, logProvider, Folder).Save(this);
+            }
+        }
 
         /// <summary>
         /// Executes any validations on set values.

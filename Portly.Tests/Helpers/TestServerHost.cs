@@ -24,7 +24,7 @@ namespace Portly.Tests.Helpers
 
         public TestServerHost(string folder)
         {
-            Server = new PortlyServer(folder);
+            Server = new PortlyServer(folder, logProvider: TestLogProvider.Instance);
             Server.OnServerStarted += (_, _) => _startedTcs.TrySetResult();
             Server.OnPacketReceived += HandleReceivedPacket;
             Server.OnClientConnected += HandleClientConnection;
@@ -77,7 +77,10 @@ namespace Portly.Tests.Helpers
                 if (_packetBuffer.TryGetValue(key, out var buffer) &&
                     buffer.Count > 0)
                 {
-                    return buffer.Dequeue();
+                    var value = buffer.Dequeue();
+                    if (buffer.Count == 0)
+                        _packetBuffer.Remove(key);
+                    return value;
                 }
 
                 tcs = new TaskCompletionSource<Packet>(TaskCreationOptions.RunContinuationsAsynchronously);

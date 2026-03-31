@@ -22,7 +22,7 @@ namespace Portly.Runtime
         public IPAddress IpAddress { get; } = (connection.RemoteEndPoint as IPEndPoint
                  ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address.MapToIPv6();
         public CancellationTokenSource Cancellation { get; } = new();
-        public ClientRateLimiter ClientRateLimiter { get; } = new(configuration.RateLimits);
+        public ClientRateLimiter ClientRateLimiter { get; } = new(configuration);
         public Task? ClientTask { get; set; }
 
         public Guid Id { get; } = Guid.NewGuid();

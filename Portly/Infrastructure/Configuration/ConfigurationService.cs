@@ -1,6 +1,7 @@
 ﻿using Portly.Abstractions;
 using Portly.Infrastructure.Configuration.Serializers;
 using Portly.Infrastructure.Logging;
+using System.Collections.Concurrent;
 using System.Net;
 
 namespace Portly.Infrastructure.Configuration
@@ -16,8 +17,9 @@ namespace Portly.Infrastructure.Configuration
             var file = LoadOrCreate<ConfigurationFile>(GetFile("server_config"));
             var configuration = new ServerConfiguration
             {
+                Folder = _folder,
                 RateLimits = file.RateLimits,
-                IpBlacklist = LoadList(GetFile("ip-blacklist.txt")),
+                IpBlacklist = LoadConcurrentDictionary(GetFile("ip-blacklist.txt")),
                 IpWhitelist = LoadList(GetFile("ip-whitelist.txt"))
             };
 
@@ -38,7 +40,7 @@ namespace Portly.Infrastructure.Configuration
 
             _ = SaveOrCreate(GetFile("server_config"), file);
 
-            SaveList(GetFile("ip-blacklist.txt"), config.IpBlacklist);
+            SaveConcurrentDictionary(GetFile("ip-blacklist.txt"), config.IpBlacklist);
             SaveList(GetFile("ip-whitelist.txt"), config.IpWhitelist);
 
             _logProvider?.Log("Saved configuration files.", LogLevel.Debug);
@@ -78,6 +80,54 @@ namespace Portly.Infrastructure.Configuration
             }
 
             return set;
+        }
+
+        private ConcurrentDictionary<IPAddress, DateTime> LoadConcurrentDictionary(string fileName)
+        {
+            if (!File.Exists(fileName))
+            {
+                File.WriteAllText(fileName, string.Empty);
+                return [];
+            }
+
+            var dict = new ConcurrentDictionary<IPAddress, DateTime>();
+
+            foreach (var line in File.ReadLines(fileName))
+            {
+                var trimmed = line.Trim();
+
+                // Skip empty lines and comments
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                    continue;
+
+                var parts = trimmed.Split('|');
+                DateTime? expireDate = null;
+                if (parts.Length > 1 && DateTime.TryParse(parts[1], null, System.Globalization.DateTimeStyles.RoundtripKind, out var expiry))
+                    expireDate = expiry;
+
+                if (IPAddress.TryParse(parts[0], out var ip))
+                {
+                    dict[ip.MapToIPv6()] = expireDate ?? DateTime.MaxValue;
+                }
+                else
+                {
+                    _logProvider?.Log($"Invalid IP in {fileName}: {parts[0]}", LogLevel.Warning);
+                }
+            }
+
+            return dict;
+        }
+
+        private static void SaveConcurrentDictionary(string fileName, ConcurrentDictionary<IPAddress, DateTime> values)
+        {
+            // Undo normalization back to IPv4
+            File.WriteAllLines(fileName, values
+                .Select(ip =>
+                {
+                    var ipValue = ip.Key.MapToIPv4().ToString();
+                    return ip.Value == DateTime.MaxValue ?
+                        $"{ipValue}" : $"{ipValue}|{ip.Value:O}";
+                }));
         }
 
         private static void SaveList(string fileName, IEnumerable<IPAddress> values)

@@ -371,7 +371,7 @@ namespace Portly.Runtime
                     {
                         if (validReason != null)
                         {
-                            await connection.SendPacketAsync(Packet.Create(PacketType.LiteHandshake, validReason), false);
+                            await connection.SendPacketAsync(Packet.Create(PacketType.LiteHandshake, validReason), false, serverToken);
                             await connection.DisconnectInternalAsync();
                             _logProvider?.Log($"[{connection.Id}]: Connection failed ({validReason}).", LogLevel.Warning);
                             return;
@@ -479,7 +479,7 @@ namespace Portly.Runtime
 
         private (bool allowed, string? reason) ValidateIpAddress(IPAddress ip)
         {
-            // If whitelist has entries → ONLY allow those
+            // If whitelist has entries -> ONLY allow those
             if (Configuration.IpWhitelist.Count > 0)
             {
                 if (!Configuration.IpWhitelist.Contains(ip))
@@ -489,8 +489,17 @@ namespace Portly.Runtime
             }
 
             // Otherwise use banlist (allow all except banned)
-            if (Configuration.IpBlacklist.Contains(ip))
-                return (false, $"IP {ip} is banned.");
+            if (Configuration.IpBlacklist.TryGetValue(ip, out var expireTime))
+            {
+                if (expireTime > DateTime.UtcNow)
+                {
+                    return (false, $"IP {ip} is banned.");
+                }
+
+                // Remove from blacklist
+                Configuration.IpBlacklist.TryRemove(ip, out _);
+                Configuration.Save(logProvider: _logProvider);
+            }
 
             return (true, null);
         }
@@ -534,9 +543,7 @@ namespace Portly.Runtime
             if (_clients.Count >= Configuration.ConnectionSettings.MaxConnections)
                 return (false, "Server is full.");
 
-            // Verify if tcp client
-            var remoteEndPoint = connection.Connection.RemoteEndPoint as IPEndPoint;
-            if (remoteEndPoint == null)
+            if (connection.Connection.RemoteEndPoint is not IPEndPoint remoteEndPoint)
                 return (false, "Unable to determine client IP.");
 
             var clientIp = remoteEndPoint.Address.MapToIPv6();
@@ -623,11 +630,13 @@ namespace Portly.Runtime
         private async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
             // Rate limit non-system packets
-            if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(packet.Payload.Length))
+            if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(connection.IpAddress, packet.Payload.Length, out bool banned))
             {
-                // TODO: ip-ban the connection after repeated attempts.
+                if (banned)
+                    _logProvider?.Log($"[{connection.Id}]: IP {connection.IpAddress} has been banned due to repeated violations.", LogLevel.Warning);
+                else
+                    _logProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
 
-                _logProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
                 await connection.DisconnectAsync("Rate limit exceeded.");
                 return;
             }

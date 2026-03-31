@@ -18,7 +18,7 @@ namespace Portly.Tests.Helpers
         public TestClientHost(string folder)
         {
             Directory.CreateDirectory(folder);
-            Client = new PortlyClient(folder);
+            Client = new PortlyClient(folder, logProvider: TestLogProvider.Instance);
             Client.OnPacketReceived += HandleReceivedPacket;
         }
 
@@ -34,6 +34,8 @@ namespace Portly.Tests.Helpers
                     buffer.Count > 0)
                 {
                     var packet = buffer.Dequeue();
+                    if (buffer.Count == 0)
+                        _bufferedPackets.Remove(packetId);
                     return packet;
                 }
 
