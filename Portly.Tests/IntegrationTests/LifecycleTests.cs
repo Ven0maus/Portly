@@ -240,6 +240,13 @@ namespace Portly.Tests.IntegrationTests
         public async Task Packets_Should_Maintain_Order_Under_Concurrent_Clients()
         {
             await using var host = new TestServerHost(ServerDirectory);
+
+            // Adjust rate limits
+            host.Server.Configuration.RateLimits.MaxPacketsPerSecond = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxPacketsPerBurst = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxBytesPerSecond = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxBytesPerBurst = 10_000_000;
+
             await host.StartAsync();
 
             await using var clients = new TestClientGroup(ClientDirectory, 5);
@@ -248,6 +255,18 @@ namespace Portly.Tests.IntegrationTests
             var connections = clients.Clients
                 .Select(c => host.GetServerConnection(c))
                 .ToList();
+
+            // Concurrent sends with interleaving
+            var sendTasks = clients.Clients.Select((c, ci) =>
+                Task.Run(async () =>
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        await c.SendAsync(Packet.Create(PacketType.Custom, $"{i}"));
+                    }
+                }));
+
+            await Task.WhenAll(sendTasks);
 
             var receiveTasks = connections.Select(conn =>
                 Task.Run(async () =>
@@ -263,18 +282,6 @@ namespace Portly.Tests.IntegrationTests
                     return list;
                 }))
                 .ToList();
-
-            // Concurrent sends with interleaving
-            var sendTasks = clients.Clients.Select((c, ci) =>
-                Task.Run(async () =>
-                {
-                    for (int i = 0; i < 10; i++)
-                    {
-                        await c.SendAsync(Packet.Create(PacketType.Custom, $"{i}"));
-                    }
-                }));
-
-            await Task.WhenAll(sendTasks);
 
             var results = await Task.WhenAll(receiveTasks);
 

@@ -4,38 +4,37 @@ using Portly.Runtime;
 
 namespace Portly.Tests.Helpers
 {
-    /// <summary>
-    /// Ready to use client host with awaitable connect, sending and timeouts.
-    /// </summary>
     internal sealed class TestClientHost : IAsyncDisposable
     {
         public PortlyClient Client { get; }
 
         private readonly Lock _lock = new();
+
         private readonly Dictionary<int, Queue<TaskCompletionSource<Packet>>> _waitersById = [];
         private readonly Dictionary<int, Queue<Packet>> _bufferedPackets = [];
 
         public TestClientHost(string folder)
         {
             Directory.CreateDirectory(folder);
-            Client = new PortlyClient(folder, logProvider: TestLogProvider.Instance);
+            Client = new PortlyClient(folder, logProvider: new TestLogProvider(true));
             Client.OnPacketReceived += HandleReceivedPacket;
         }
 
-        public async Task<Packet> WaitForPacketAsync(Enum identifier)
+        public async Task<Packet> WaitForPacketAsync(Enum identifier, int? timeout = null)
         {
             var packetId = ((PacketIdentifier)identifier).Id;
             TaskCompletionSource<Packet> tcs;
 
             lock (_lock)
             {
-                // If packet already arrived, consume it immediately
                 if (_bufferedPackets.TryGetValue(packetId, out var buffer) &&
                     buffer.Count > 0)
                 {
                     var packet = buffer.Dequeue();
+
                     if (buffer.Count == 0)
                         _bufferedPackets.Remove(packetId);
+
                     return packet;
                 }
 
@@ -50,7 +49,35 @@ namespace Portly.Tests.Helpers
                 queue.Enqueue(tcs);
             }
 
-            return await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            try
+            {
+                return await tcs.Task.WaitAsync(TimeSpan.FromSeconds(timeout ?? 5));
+            }
+            catch
+            {
+                // Cleanup timed-out waiter
+                lock (_lock)
+                {
+                    if (_waitersById.TryGetValue(packetId, out var queue))
+                    {
+                        var newQueue = new Queue<TaskCompletionSource<Packet>>();
+
+                        while (queue.Count > 0)
+                        {
+                            var item = queue.Dequeue();
+                            if (!ReferenceEquals(item, tcs))
+                                newQueue.Enqueue(item);
+                        }
+
+                        if (newQueue.Count > 0)
+                            _waitersById[packetId] = newQueue;
+                        else
+                            _waitersById.Remove(packetId);
+                    }
+                }
+
+                throw;
+            }
         }
 
         public async Task<T> WaitForPacketAsync<T>(Enum identifier)
@@ -59,20 +86,26 @@ namespace Portly.Tests.Helpers
             return packet.As<T>().Payload;
         }
 
-        public async Task ConnectAsync(string host, int port)
+        public async Task ConnectAsync(string host, int port, int? timeout = null)
         {
+            if (Client.IsConnected) return;
+
             await Client.ConnectAsync(host, port)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+                .WaitAsync(TimeSpan.FromSeconds(timeout ?? 5));
         }
 
-        public async Task SendAsync(Packet packet)
+        public async Task SendAsync(Packet packet, int? timeout = null)
         {
+            if (!Client.IsConnected) return;
+
             await Client.SendPacketAsync(packet, encrypt: false)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+                .WaitAsync(TimeSpan.FromSeconds(timeout ?? 5));
         }
 
         public async Task DisconnectAsync(TestServerHost serverHost)
         {
+            if (!Client.IsConnected) return;
+
             var serverClient = serverHost.GetServerConnection(this);
             var disconnectTask = serverHost.WaitForClientDisconnectedAsync(serverClient);
 
@@ -82,7 +115,8 @@ namespace Portly.Tests.Helpers
 
         public async ValueTask DisposeAsync()
         {
-            await Client.DisconnectAsync();
+            if (Client.IsConnected)
+                await Client.DisconnectAsync();
         }
 
         private void HandleReceivedPacket(object? sender, Packet packet)
@@ -96,6 +130,9 @@ namespace Portly.Tests.Helpers
                     queue.Count > 0)
                 {
                     waiter = queue.Dequeue();
+
+                    if (queue.Count == 0)
+                        _waitersById.Remove(id);
                 }
                 else
                 {

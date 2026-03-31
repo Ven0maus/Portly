@@ -633,11 +633,23 @@ namespace Portly.Runtime
             if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(connection.IpAddress, packet.Payload.Length, out bool banned))
             {
                 if (banned)
+                {
                     _logProvider?.Log($"[{connection.Id}]: IP {connection.IpAddress} has been banned due to repeated violations.", LogLevel.Warning);
-                else
-                    _logProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
 
-                await connection.DisconnectAsync("Rate limit exceeded.");
+                    // If banned, ban all clients with the same IP
+                    foreach (var client in _clients.Values.ToArray())
+                    {
+                        if (client.IpAddress == connection.IpAddress)
+                        {
+                            await client.DisconnectAsync("Rate limit exceeded.");
+                        }
+                    }
+                }
+                else
+                {
+                    _logProvider?.Log($"[{connection.Id}]: rate limit exceeded, client was forcibly disconnected.", LogLevel.Warning);
+                    await connection.DisconnectAsync("Rate limit exceeded.");
+                }
                 return;
             }
 
