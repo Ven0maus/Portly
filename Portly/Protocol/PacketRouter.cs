@@ -98,9 +98,15 @@ namespace Portly.Protocol
             try
             {
                 if (_handlers.TryGetValue(packet.Identifier.Id, out var handler))
+                {
                     return handler == null ? null : handler(client, packet);
+                }
                 else
+                {
+                    if (packet.Identifier.Id == (int)PacketType.KeepAlive)
+                        return null;
                     _logProvider?.Log($"No handler registered for packet {packet.Identifier}", Infrastructure.Logging.LogLevel.Warning);
+                }
             }
             catch (Exception e)
             {
