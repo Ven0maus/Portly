@@ -379,6 +379,7 @@ namespace Portly.Runtime
 
         private void ResetConnectionState()
         {
+            ServerClientId = Guid.Empty;
             _stream = null;
             _backgroundTask = null;
 

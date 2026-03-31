@@ -1,6 +1,5 @@
 ﻿using Portly.Abstractions;
 using Portly.Infrastructure;
-using Portly.Infrastructure.Configuration;
 using Portly.Protocol;
 using System.Net;
 
@@ -10,20 +9,17 @@ namespace Portly.Runtime
     /// Represent a data container for a client that is connected to a server.
     /// </summary>
     /// <param name="packetProtocol"></param>
-    /// <param name="configuration"></param>
     /// <param name="connection"></param>
     /// <param name="keepAliveManager"></param>
     /// <param name="onDisconnect"></param>
-    /// <param name="logProvider"></param>
-    internal class ServerClient(IPacketProtocol packetProtocol, ServerConfiguration configuration, ITransportConnection connection,
-        KeepAliveManager<ServerClient> keepAliveManager, EventHandler<IServerClient>? onDisconnect, ILogProvider? logProvider = null) : IServerClient
+    internal class ServerClient(IPacketProtocol packetProtocol, ITransportConnection connection,
+        KeepAliveManager<ServerClient> keepAliveManager, EventHandler<IServerClient>? onDisconnect) : IServerClient
     {
         public ITransportConnection Connection { get; } = connection;
         public Stream Stream { get; } = connection.Stream;
         public IPAddress IpAddress { get; } = (connection.RemoteEndPoint as IPEndPoint
                  ?? throw new InvalidOperationException("Expected IPEndPoint.")).Address.MapToIPv6();
         public CancellationTokenSource Cancellation { get; } = new();
-        public ClientRateLimiter ClientRateLimiter { get; } = new(configuration, logProvider);
         public Task? ClientTask { get; set; }
 
         public Guid Id { get; } = Guid.NewGuid();

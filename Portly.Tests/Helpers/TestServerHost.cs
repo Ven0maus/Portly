@@ -143,8 +143,19 @@ namespace Portly.Tests.Helpers
 
         public async Task WaitForClientDisconnectedAsync(TestClientHost client)
         {
-            var conn = GetServerConnection(client);
-            if (!_clientMap.ContainsKey(conn.Id))
+            IServerClient? conn;
+
+            try
+            {
+                conn = GetServerConnection(client);
+            }
+            catch (Exception)
+            {
+                // Already disconnected
+                return;
+            }
+
+            if (!_clientMap.ContainsKey(client.Client.ServerClientId))
                 return;
 
             var tcs = new TaskCompletionSource<IServerClient>(TaskCreationOptions.RunContinuationsAsynchronously);

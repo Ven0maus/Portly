@@ -37,6 +37,7 @@ namespace Portly.Runtime
     {
         private readonly IServerTransport _serverTransport;
         private readonly TrustServer _trustServer;
+        private readonly ClientRateLimiter _clientRateLimiter;
         private readonly CancellationTokenSource _cts;
 
         private readonly SemaphoreSlim _broadcastSemaphore = new(100);
@@ -64,11 +65,17 @@ namespace Portly.Runtime
             [.. _clients.Values];
 
         /// <summary>
-        /// Returns the specific client by guid.
+        /// Determines if a client is connected, outputs the client if true.
         /// </summary>
         /// <param name="clientId"></param>
+        /// <param name="client"></param>
         /// <returns></returns>
-        public IServerClient GetClient(Guid clientId) => _clients[clientId];
+        public bool IsConnected(Guid clientId, out IServerClient? client)
+        {
+            var value = _clients.TryGetValue(clientId, out var serverClient);
+            client = serverClient;
+            return value;
+        }
 
         /// <summary>
         /// Populated upon server start.
@@ -120,6 +127,7 @@ namespace Portly.Runtime
             _serverTransport = serverTransport ?? new TcpServerTransport(logProvider);
             _trustServer = new TrustServer(folder);
             _cts = new();
+            _clientRateLimiter = new ClientRateLimiter(Configuration, logProvider);
 
             _serverTransport.OnServerStarted += (sender, args) => OnServerStarted?.Invoke(this, EventArgs.Empty);
             _serverTransport.OnServerStopped += (sender, args) => OnServerStopped?.Invoke(this, EventArgs.Empty);
@@ -357,7 +365,7 @@ namespace Portly.Runtime
 
         private async Task HandleClientAsync(ITransportConnection client, CancellationToken serverToken)
         {
-            var connection = new ServerClient(_packetProtocol.Invoke(), Configuration, client, _keepAliveManager, OnClientDisconnectedImpl, _logProvider);
+            var connection = new ServerClient(_packetProtocol.Invoke(), client, _keepAliveManager, OnClientDisconnectedImpl);
             _clients[connection.Id] = connection;
 
             _logProvider?.Log($"[{connection.Id}]: Connecting to server..");
@@ -630,7 +638,7 @@ namespace Portly.Runtime
         private async Task HandlePacketAsync(ServerClient connection, Packet packet)
         {
             // Rate limit non-system packets
-            if (!IsSystemPacket(packet) && !connection.ClientRateLimiter.TryConsume(connection.IpAddress, packet.Payload.Length, out bool banned))
+            if (!IsSystemPacket(packet) && !_clientRateLimiter.TryConsume(connection.IpAddress, packet.Payload.Length, out bool banned))
             {
                 if (banned)
                 {

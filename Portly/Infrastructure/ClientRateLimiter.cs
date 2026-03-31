@@ -5,27 +5,23 @@ using System.Net;
 
 namespace Portly.Infrastructure
 {
-    /// <summary>
-    /// A rate limiting implementation that handles both packet and bandwith limiting.
-    /// </summary>
     internal sealed class ClientRateLimiter
     {
         private class RateLimitState
         {
             public int Violations;
             public DateTime LastViolation;
+            public double AvailablePackets;
+            public double AvailableBytes;
+            public long LastRefillTicks;
+            public readonly Lock Lock = new();
         }
 
-        private readonly Lock _bucketLock = new();
-        private readonly ConcurrentDictionary<IPAddress, RateLimitState> _rateLimitStates = new();
+        private readonly ConcurrentDictionary<IPAddress, RateLimitState> _states = new();
 
         private const int MaxViolations = 5;
         private static readonly TimeSpan ViolationWindow = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan BanDuration = TimeSpan.FromDays(7);
-
-        private double _availablePackets;
-        private double _availableBytes;
-        private long _lastRefillTicks;
 
         private readonly ServerConfiguration _serverConfiguration;
         private readonly ILogProvider? _logProvider;
@@ -41,28 +37,32 @@ namespace Portly.Infrastructure
 
             _logProvider = logProvider;
             _serverConfiguration = configuration;
-
-            // Set defaults
-            _availablePackets = rateLimitSettings.MaxPacketsPerBurst;
-            _availableBytes = rateLimitSettings.MaxBytesPerBurst;
-            _lastRefillTicks = DateTime.UtcNow.Ticks;
         }
 
-        /// <summary>
-        /// Try consuming 1 packet of size 'bytes'. Returns true if allowed, false if rate limit exceeded.
-        /// </summary>
         public bool TryConsume(IPAddress ip, int bytes, out bool banned)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
 
-            lock (_bucketLock)
+            var state = _states.GetOrAdd(ip, _ =>
             {
-                Refill();
-
-                if (_availablePackets >= 1 && _availableBytes >= bytes)
+                var r = _serverConfiguration.RateLimits;
+                return new RateLimitState
                 {
-                    _availablePackets -= 1;
-                    _availableBytes -= bytes;
+                    AvailablePackets = r.MaxPacketsPerBurst,
+                    AvailableBytes = r.MaxBytesPerBurst,
+                    LastRefillTicks = DateTime.UtcNow.Ticks
+                };
+            });
+
+            lock (state.Lock)
+            {
+                Refill(state);
+
+                if (state.AvailablePackets >= 1 && state.AvailableBytes >= bytes)
+                {
+                    state.AvailablePackets -= 1;
+                    state.AvailableBytes -= bytes;
+
                     banned = false;
                     return true;
                 }
@@ -72,22 +72,24 @@ namespace Portly.Infrastructure
             return false;
         }
 
-        private void Refill()
+        private void Refill(RateLimitState state)
         {
             var nowTicks = DateTime.UtcNow.Ticks;
-            var elapsedSec = (nowTicks - _lastRefillTicks) / (double)TimeSpan.TicksPerSecond;
+            var elapsedSec = (nowTicks - state.LastRefillTicks) / (double)TimeSpan.TicksPerSecond;
 
             if (elapsedSec <= 0) return;
 
-            _lastRefillTicks = nowTicks;
+            state.LastRefillTicks = nowTicks;
 
-            _availablePackets = Math.Min(
-                _serverConfiguration.RateLimits.MaxPacketsPerBurst,
-                _availablePackets + elapsedSec * _serverConfiguration.RateLimits.MaxPacketsPerSecond);
+            var r = _serverConfiguration.RateLimits;
 
-            _availableBytes = Math.Min(
-                _serverConfiguration.RateLimits.MaxBytesPerBurst,
-                _availableBytes + elapsedSec * _serverConfiguration.RateLimits.MaxBytesPerSecond);
+            state.AvailablePackets = Math.Min(
+                r.MaxPacketsPerBurst,
+                state.AvailablePackets + elapsedSec * r.MaxPacketsPerSecond);
+
+            state.AvailableBytes = Math.Min(
+                r.MaxBytesPerBurst,
+                state.AvailableBytes + elapsedSec * r.MaxBytesPerSecond);
         }
 
         private void BanIp(IPAddress ip, TimeSpan duration)
@@ -98,11 +100,19 @@ namespace Portly.Infrastructure
 
         private bool RegisterViolation(IPAddress ip)
         {
-            var state = _rateLimitStates.GetOrAdd(ip, _ => new RateLimitState());
-
-            lock (state)
+            var state = _states.GetOrAdd(ip, _ =>
             {
-                // Reset if outside window
+                var r = _serverConfiguration.RateLimits;
+                return new RateLimitState
+                {
+                    AvailablePackets = r.MaxPacketsPerBurst,
+                    AvailableBytes = r.MaxBytesPerBurst,
+                    LastRefillTicks = DateTime.UtcNow.Ticks
+                };
+            });
+
+            lock (state.Lock)
+            {
                 if (DateTime.UtcNow - state.LastViolation > ViolationWindow)
                 {
                     state.Violations = 0;
@@ -116,6 +126,7 @@ namespace Portly.Infrastructure
                     BanIp(ip, BanDuration);
                     return true;
                 }
+
                 return false;
             }
         }

@@ -225,6 +225,12 @@ namespace Portly.Tests.StressTests
         public async Task StressTest_SequentialClientConnections()
         {
             await using var host = new TestServerHost(ServerDirectory);
+
+            host.Server.Configuration.RateLimits.MaxPacketsPerSecond = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxPacketsPerBurst = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxBytesPerSecond = 10_000_000;
+            host.Server.Configuration.RateLimits.MaxBytesPerBurst = 10_000_000;
+
             await host.StartAsync();
 
             var random = new Random(123);
@@ -242,7 +248,7 @@ namespace Portly.Tests.StressTests
                 await Task.Delay(random.Next(1, 5));
             }
 
-            Assert.That(host.Server.ConnectedClients.Count, Is.EqualTo(0));
+            Assert.That(host.Server.ConnectedClients, Is.Empty);
         }
 
         [Test]

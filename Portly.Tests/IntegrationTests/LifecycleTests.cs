@@ -285,5 +285,65 @@ namespace Portly.Tests.IntegrationTests
 
             Assert.That(host.Server.ConnectedClients, Is.Empty);
         }
+
+        [Test]
+        public async Task Client_Should_Be_Banned_After_Repeated_RateLimitViolations()
+        {
+            await using var host = new TestServerHost(ServerDirectory);
+            await host.StartAsync();
+
+            await using var client = new TestClientHost(ClientDirectory);
+
+            int reconnectAttempts = 0;
+            bool banned = false;
+
+            while (!banned && reconnectAttempts < 20)
+            {
+                reconnectAttempts++;
+
+                if (!client.Client.IsConnected)
+                    await client.ConnectAsync(LocalHost, host.Port, host);
+
+                Assert.That(host.Server.IsConnected(client.Client.ServerClientId, out var serverClient), Is.True, $"{client.Client.ServerClientId}");
+
+                // Send packets rapidly to trigger rate limit
+                for (int i = 0; i < 100; i++)
+                {
+                    try
+                    {
+                        await client.SendAsync(Packet.Create(PacketType.Custom, "spam"));
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+
+                // Wait for server to disconnect the client (rate limit kick)
+                try
+                {
+                    await host.WaitForClientDisconnectedAsync(client);
+                    await client.WaitForDisconnectedAsync();
+                }
+                catch (Exception)
+                {
+                    // timeout is acceptable; continue loop
+                    throw;
+                }
+
+                var ip = serverClient!.IpAddress;
+
+                if (host.Server.Configuration.IpBlacklist.ContainsKey(ip))
+                {
+                    banned = true;
+                    break;
+                }
+            }
+
+            Assert.That(banned, Is.True, "Client IP should eventually be banned after repeated violations.");
+
+            // Attempt to reconnect and verify that we cannot
+            Assert.ThrowsAsync<Exception>(async () => await client.ConnectAsync(LocalHost, host.Port, host));
+        }
     }
 }

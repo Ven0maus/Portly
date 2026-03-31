@@ -10,6 +10,8 @@ namespace Portly.Tests.Helpers
 
         private readonly Lock _lock = new();
 
+        private readonly Queue<TaskCompletionSource> _disconnectWaiters = [];
+        private readonly Queue<bool> _disconnectBuffer = [];
         private readonly Dictionary<int, Queue<TaskCompletionSource<Packet>>> _waitersById = [];
         private readonly Dictionary<int, Queue<Packet>> _bufferedPackets = [];
 
@@ -18,6 +20,27 @@ namespace Portly.Tests.Helpers
             Directory.CreateDirectory(folder);
             Client = new PortlyClient(folder, logProvider: new TestLogProvider(true));
             Client.OnPacketReceived += HandleReceivedPacket;
+            Client.OnDisconnected += Client_OnDisconnected;
+        }
+
+        private void Client_OnDisconnected(object? sender, EventArgs e)
+        {
+            TaskCompletionSource? waiter;
+            lock (_lock)
+            {
+                if (_disconnectWaiters.Count > 0)
+                {
+                    waiter = _disconnectWaiters.Dequeue();
+                }
+                else
+                {
+                    // Buffer the disconnect event if no one is waiting
+                    _disconnectBuffer.Enqueue(true);
+                    return;
+                }
+            }
+
+            waiter?.TrySetResult();
         }
 
         public async Task<Packet> WaitForPacketAsync(Enum identifier, int? timeout = null)
@@ -84,6 +107,48 @@ namespace Portly.Tests.Helpers
         {
             var packet = await WaitForPacketAsync(identifier);
             return packet.As<T>().Payload;
+        }
+
+        public async Task WaitForDisconnectedAsync(int? timeout = null)
+        {
+            TaskCompletionSource tcs;
+
+            lock (_lock)
+            {
+                if (_disconnectBuffer.Count > 0)
+                {
+                    _disconnectBuffer.Dequeue();
+                    return;
+                }
+
+                tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _disconnectWaiters.Enqueue(tcs);
+            }
+
+            try
+            {
+                await tcs.Task.WaitAsync(TimeSpan.FromSeconds(timeout ?? 5));
+            }
+            catch
+            {
+                lock (_lock)
+                {
+                    // Remove timed-out waiter
+                    var newQueue = new Queue<TaskCompletionSource>();
+
+                    while (_disconnectWaiters.Count > 0)
+                    {
+                        var item = _disconnectWaiters.Dequeue();
+                        if (!ReferenceEquals(item, tcs))
+                            newQueue.Enqueue(item);
+                    }
+
+                    while (newQueue.Count > 0)
+                        _disconnectWaiters.Enqueue(newQueue.Dequeue());
+                }
+
+                throw;
+            }
         }
 
         public async Task ConnectAsync(string host, int port, TestServerHost serverHost, int? timeout = null)
