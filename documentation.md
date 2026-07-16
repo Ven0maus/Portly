@@ -30,29 +30,29 @@ Portly follows a **layered architecture** with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Runtime Layer (PortlyServer / PortlyClient)                 │
-│  - Orchestrates connections, handshakes, packet routing      │
+│  Runtime Layer (PortlyServer / PortlyClient)                │
+│  - Orchestrates connections, handshakes, packet routing     │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Protocol Layer                                              │
+│  Protocol Layer                                             │
 │  LengthPrefixedPacketProtocol (IPacketProtocol)             │
-│  - Reads/writes length-prefixed frames                       │
-│  - Handles encryption, replay protection                     │
+│  - Reads/writes length-prefixed frames                      │
+│  - Handles encryption, replay protection                    │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Security Layer                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │ TrustClient  │    │TrustServer   │    │ AESEncryption│  │
-│  └──────────────┘    └──────────────┘    └──────────────┘  │
-│         ↓                    ↓                  ↓            │
+│  Security Layer                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ TrustClient  │    │TrustServer   │    │ AESEncryption│   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
+│         ↓                    ↓                  ↓           │
 │  TOFU fingerprint      ECDH key exchange     Session keys   │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  Transport Layer (TcpServerTransport / TcpClientTransport)  │
-│  - Raw TCP socket handling, async I/O                         │
+│  - Raw TCP socket handling, async I/O                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -258,15 +258,15 @@ These classes wrap .NET's `TcpListener` (server) or `TcpClient` (client). They i
 ## Data Flow
 
 ```
-┌───────────────┐     ┌─────────────────────┐     ┌───────────────┐
-│   Application │────▶│ LengthPrefixedPacket│────▶│  Transport     │
-│    Code       │     │   Protocol Layer    │     │ (TCP Stream)   │
-└───────────────┘     └─────────────────────┘     └───────────────┘
-                              ↓
-                    ┌─────────────────────┐
-                    │  Encryption/        │
-                    │  Replay Protection  │
-                    └─────────────────────┘
+┌───────────────┐       ┌─────────────────────┐       ┌───────────────┐
+│   Application │ ────> │ LengthPrefixedPacket│ ────> │  Transport    │
+│    Code       │       │   Protocol Layer    │       │ (TCP Stream)  │
+└───────────────┘       └─────────────────────┘       └───────────────┘
+                                  ↓
+                        ┌─────────────────────┐
+                        │  Encryption/        │
+                        │  Replay Protection  │
+                        └─────────────────────┘
 ```
 
 - **Input:** Application code creates a `Packet<T>` (e.g., sending a chat message). The packet is serialized by the MessagePack provider.
