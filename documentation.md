@@ -351,15 +351,35 @@ The configuration also includes per-IP limits (`MaxConnectionsPerIp`) and the ab
 
 ### Adding New Packet Types
 
-1. Define a new enum value in `PacketType.cs` (or use an existing one).
-2. Create a DTO class that will carry your data; it must be MessagePack-serializable.
-3. Register a handler with the server/client router:
+You cannot define new values in `PacketType` enum directly because it is internal to the library. Instead, create your own custom enum with values starting higher than existing ones:
 
-   ```csharp
-   server.Router.Register<MyNewPacket>(MyPacketType, async (client, payload) => {
-       // process payload
-   });
-   ```
+```csharp
+public enum CustomPacketType
+{
+    JoinChannel = 101,
+    LeaveChannel = 102
+}
+```
+
+Then create packets using:
+
+```csharp
+var packet = Packet.Create<PacketObject, CustomPacketType>(CustomPacketType.JoinChannel, packetObjectPayload);
+```
+
+The generic `Packet.Create<TPayload, TPacketType>` allows you to specify both the payload type and your custom packet type enum.
+
+### Registering Handlers with the Router
+
+After creating a custom packet, register a handler via the router:
+
+```csharp
+server.Router.Register<CustomPacketType>(async (client, payload) => {
+    // handle incoming JoinChannel or LeaveChannel
+});
+```
+
+The same pattern applies to clients—use `client.Router.Register<T>` to process incoming packets. This decouples packet handling from the core library and lets you define custom logic per packet type.
 
 ### Adding Custom Serialization
 
