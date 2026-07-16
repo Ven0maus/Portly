@@ -316,9 +316,6 @@ server.Router.Register(MyPacketType, async (client, packet) => {
 
 Portly reads its settings from `ServerConfiguration`, which is loaded once at startup. The configuration supports two file formats via the serializer interface:
 
-- **JSON** – default; files are placed in a configurable folder (or the current directory).
-- **XML** – optional, provided by `XmlProvider`.
-
 ### Configuration Sections
 
 | Section | Key Settings | Description |
@@ -328,6 +325,14 @@ Portly reads its settings from `ServerConfiguration`, which is loaded once at st
 | **IpWhitelist / IpBlacklist** | Lists of IP addresses | Only whitelist IPs are allowed (if set); otherwise blacklist applies. |
 
 The configuration also includes per-IP limits (`MaxConnectionsPerIp`) and the ability to ban an IP temporarily by storing an expiration timestamp in `IpBlacklist`.
+
+### Supported File Formats
+
+Portly supports two serialization formats for its configuration files:
+- **XML** – default format; uses `XmlProvider` (built-in). Configuration is saved as `.xml` files.
+- **JSON** – optional, provided by `JsonProvider`. Can be enabled by passing a custom serializer instance to the constructor.
+
+> **Note:** The codebase includes `JsonProvider`, but it is not currently instantiated anywhere; only XML configuration is used in practice.
 
 ---
 
