@@ -374,12 +374,23 @@ The generic `Packet.Create<TPayload, TPacketType>` allows you to specify both th
 After creating a custom packet, register a handler via the router:
 
 ```csharp
-server.Router.Register<CustomPacketType>(async (client, payload) => {
+server.Router.Register<MyPayload>(CustomPacketType.JoinChannel, async (client, payload) => {
     // handle incoming JoinChannel or LeaveChannel
 });
 ```
 
-The same pattern applies to clients—use `client.Router.Register<T>` to process incoming packets. This decouples packet handling from the core library and lets you define custom logic per packet type.
+The same pattern applies to clients—use `client.Router.Register<T>` where `T` is your payload type. This decouples packet handling from the core library and lets you define custom logic per packet type.
+
+For reference, built-in system packets are registered similarly:
+
+```csharp
+Router.Register(PacketType.Disconnect, async (client, packet) => {
+    string reason = string.Empty;
+    if (packet.Payload.Length != 0)
+        reason = ((Packet<string>)packet).Payload;
+    await OnServerDisconnectedAsync(reason);
+});
+```
 
 ### Adding Custom Serialization
 
