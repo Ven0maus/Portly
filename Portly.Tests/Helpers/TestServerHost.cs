@@ -10,6 +10,7 @@ namespace Portly.Tests.Helpers
     internal sealed class TestServerHost : IAsyncDisposable
     {
         public PortlyServer Server { get; }
+        public TestLogProvider LogProvider { get; }
         public Task ServerTask { get; private set; } = default!;
         public int Port { get; private set; }
 
@@ -23,7 +24,7 @@ namespace Portly.Tests.Helpers
 
         public TestServerHost(string folder)
         {
-            Server = new PortlyServer(folder, logProvider: new TestLogProvider(false));
+            Server = new PortlyServer(folder, logProvider: LogProvider = new TestLogProvider(false));
             Server.OnServerStarted += (_, _) => _startedTcs.TrySetResult();
             Server.OnPacketReceived += HandleReceivedPacket;
             Server.OnClientConnected += HandleClientConnection;
