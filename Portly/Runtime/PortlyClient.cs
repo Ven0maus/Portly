@@ -182,11 +182,11 @@ namespace Portly.Runtime
                 {
                     _keepAliveManager.UpdateLastReceived(this);
 
+                    OnPacketReceived?.Invoke(this, packet);
+
                     var task = Router.RouteAsync(this, packet);
                     if (task != null)
                         await task;
-
-                    OnPacketReceived?.Invoke(this, packet);
                 }, token);
 
                 _keepAliveManager.Register(this);
