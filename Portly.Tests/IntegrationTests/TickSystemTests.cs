@@ -303,6 +303,32 @@ namespace Portly.Tests.IntegrationTests
 
             Assert.That(tickCount, Is.EqualTo(countAfterStop));
         }
+
+        [Test]
+        public async Task NoTicksOccurAfterStopCompletes()
+        {
+            var host = new TestServerHost(ServerDirectory);
+
+            var ticks = 0;
+
+            host.Server.OnTick += _ =>
+            {
+                Interlocked.Increment(ref ticks);
+                return ValueTask.CompletedTask;
+            };
+
+            await host.StartAsync();
+
+            await Task.Delay(100);
+
+            await host.Server.StopAsync();
+
+            var stoppedCount = ticks;
+
+            await Task.Delay(200);
+
+            Assert.That(ticks, Is.EqualTo(stoppedCount));
+        }
     }
 }
 
