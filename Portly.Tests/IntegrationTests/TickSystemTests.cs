@@ -258,6 +258,51 @@ namespace Portly.Tests.IntegrationTests
 
             await lagDetected.Task.WaitAsync(TimeSpan.FromSeconds(1));
         }
+
+        [Test]
+        public async Task TickLoop_ShouldNotContinueAfterStopAsync()
+        {
+            var host = new TestServerHost(ServerDirectory);
+
+            var tickStarted = new TaskCompletionSource();
+            var allowTickFinish = new TaskCompletionSource();
+
+            var tickCount = 0;
+
+            host.Server.OnTick += async _ =>
+            {
+                Interlocked.Increment(ref tickCount);
+
+                tickStarted.SetResult();
+
+                // Keep the tick running while StopAsync is called
+                await allowTickFinish.Task;
+            };
+
+            await host.StartAsync();
+
+            // Wait until the tick is actively executing
+            await tickStarted.Task;
+
+            var countBeforeStop = tickCount;
+
+            var stopTask = host.Server.StopAsync();
+
+            // If StopAsync waits for the tick loop, this should still be incomplete
+            Assert.That(stopTask.IsCompleted, Is.False);
+
+            // Allow the tick handler to finish
+            allowTickFinish.SetResult();
+
+            await stopTask;
+
+            var countAfterStop = tickCount;
+
+            // Give the scheduler time to incorrectly run another tick
+            await Task.Delay(100);
+
+            Assert.That(tickCount, Is.EqualTo(countAfterStop));
+        }
     }
 }
 

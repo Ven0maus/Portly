@@ -148,7 +148,7 @@ namespace Portly.Runtime
 
         private void RegisterPredefinedRoutes()
         {
-            Router.Register(PacketType.Disconnect, async (client, packet) =>
+            Router.Register(PacketType.Disconnect, PacketExecutionMode.Immediate, async (client, packet) =>
             {
                 string reason = string.Empty;
                 if (packet.Payload.Length != 0)

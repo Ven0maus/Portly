@@ -14,7 +14,7 @@ namespace Portly.Protocol
     public sealed class PacketRouter<T>(ILogProvider? logProvider = null)
     {
         private readonly ILogProvider? _logProvider = logProvider;
-        private readonly ConcurrentDictionary<int, Func<T, Packet, Task>?> _handlers =
+        private readonly ConcurrentDictionary<int, PacketRoute<T>> _handlers =
             new();
 
         /// <summary>
@@ -30,7 +30,7 @@ namespace Portly.Protocol
         /// </summary>
         /// <param name="identifier"></param>
         /// <param name="handler"></param>
-        public void Register(PacketIdentifier identifier, PacketHandlerBase? handler)
+        public void Register(PacketIdentifier identifier, PacketExecutionMode mode, PacketHandlerBase? handler)
         {
             if (handler == null)
             {
@@ -38,9 +38,13 @@ namespace Portly.Protocol
                 return;
             }
 
-            _handlers[identifier.Id] = async (client, packet) =>
+            _handlers[identifier.Id] = new PacketRoute<T>
             {
-                await handler(client, packet);
+                ExecutionMode = mode,
+                Handler = async (client, packet) =>
+                {
+                    await handler(client, packet);
+                }
             };
         }
 
@@ -51,7 +55,7 @@ namespace Portly.Protocol
         /// <param name="identifier"></param>
         /// <param name="handler"></param>
         /// <exception cref="InvalidOperationException"></exception>
-        public void Register<TPayload>(PacketIdentifier identifier, Func<T, TPayload, Task>? handler)
+        public void Register<TPayload>(PacketIdentifier identifier, PacketExecutionMode mode, Func<T, TPayload, Task>? handler)
         {
             if (handler == null)
             {
@@ -59,21 +63,25 @@ namespace Portly.Protocol
                 return;
             }
 
-            _handlers[identifier.Id] = async (client, packet) =>
+            _handlers[identifier.Id] = new PacketRoute<T>
             {
-                TPayload payload;
-
-                try
+                ExecutionMode = mode,
+                Handler = async (client, packet) =>
                 {
-                    payload = packet.As<TPayload>().Payload;
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException(
-                        $"Failed to deserialize packet \"{packet.Identifier}\" to type \"{typeof(TPayload).Name}\" during routing.", ex);
-                }
+                    TPayload payload;
 
-                await handler(client, payload);
+                    try
+                    {
+                        payload = packet.As<TPayload>().Payload;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to deserialize packet \"{packet.Identifier}\" to type \"{typeof(TPayload).Name}\" during routing.", ex);
+                    }
+
+                    await handler(client, payload);
+                }
             };
         }
 
@@ -82,31 +90,39 @@ namespace Portly.Protocol
         /// </summary>
         /// <param name="identifier"></param>
         /// <param name="handler"></param>
-        public void Register(Enum identifier, PacketHandlerBase? handler)
-            => Register((PacketIdentifier)identifier, handler);
+        public void Register(Enum identifier, PacketExecutionMode mode, PacketHandlerBase? handler)
+            => Register((PacketIdentifier)identifier, mode, handler);
 
         /// <summary>
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
         /// </summary>
         /// <param name="identifier"></param>
         /// <param name="handler"></param>
-        public void Register<TPayload>(Enum identifier, Func<T, TPayload, Task>? handler)
-            => Register((PacketIdentifier)identifier, handler);
+        public void Register<TPayload>(Enum identifier, PacketExecutionMode mode, Func<T, TPayload, Task>? handler)
+            => Register((PacketIdentifier)identifier, mode, handler);
+
+        internal bool TryGetRoute(Packet packet, out PacketRoute<T>? route)
+        {
+            return _handlers.TryGetValue(packet.Identifier.Id, out route);
+        }
 
         internal Task? RouteAsync(T client, Packet packet)
         {
             try
             {
-                if (_handlers.TryGetValue(packet.Identifier.Id, out var handler))
+                if (_handlers.TryGetValue(packet.Identifier.Id, out var route))
                 {
-                    return handler == null ? null : handler(client, packet);
+                    return route?.Handler == null
+                        ? null
+                        : route.Handler(client, packet);
                 }
-                else
-                {
-                    if (packet.Identifier.Id == (int)PacketType.KeepAlive)
-                        return null;
-                    _logProvider?.Log($"No handler registered for packet {packet.Identifier}", Infrastructure.Logging.LogLevel.Warning);
-                }
+
+                if (packet.Identifier.Id == (int)PacketType.KeepAlive)
+                    return null;
+
+                _logProvider?.Log(
+                    $"No handler registered for packet {packet.Identifier}",
+                    Infrastructure.Logging.LogLevel.Warning);
             }
             catch (Exception e)
             {

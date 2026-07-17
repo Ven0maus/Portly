@@ -53,6 +53,8 @@ namespace Portly.Runtime
         private readonly Func<IPacketProtocol> _packetProtocol;
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
         private readonly ILogProvider? _logProvider;
+        private readonly ConcurrentQueue<QueuedPacket<IServerClient>> _simulationQueue = new();
+        private Task? _tickTask;
 
         private DateTime _lastTickWarning = DateTime.MinValue;
 
@@ -137,7 +139,7 @@ namespace Portly.Runtime
             _serverTransport.OnServerStarted += (sender, args) =>
             {
                 OnServerStarted?.Invoke(this, EventArgs.Empty);
-                _ = StartTickLoopAsync(_cts.Token);
+                _tickTask = StartTickLoopAsync(_cts.Token);
             };
             _serverTransport.OnServerStopped += (sender, args) => OnServerStopped?.Invoke(this, EventArgs.Empty);
 
@@ -169,7 +171,7 @@ namespace Portly.Runtime
 
         private void RegisterPredefinedRoutes()
         {
-            Router.Register(PacketType.Disconnect, async (client, packet) => await client.DisconnectAsync(informClient: false));
+            Router.Register(PacketType.Disconnect, PacketExecutionMode.Immediate, async (client, packet) => await client.DisconnectAsync(informClient: false));
         }
 
         /// <summary>
@@ -209,12 +211,34 @@ namespace Portly.Runtime
 
         private async ValueTask InvokeTickAsync(TickContext context)
         {
+            await ProcessTickQueueAsync();
+
             if (OnTick == null)
                 return;
 
             foreach (TickHandler handler in OnTick.GetInvocationList().Cast<TickHandler>())
             {
                 await handler(context);
+            }
+        }
+
+        private async ValueTask ProcessTickQueueAsync()
+        {
+            while (_simulationQueue.TryDequeue(out var queued))
+            {
+                try
+                {
+                    if (queued.Route.Handler != null)
+                    {
+                        await queued.Route.Handler(queued.Client, queued.Packet);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logProvider?.Log(
+                        $"Error processing tick packet: {ex.Message}",
+                        LogLevel.Error);
+                }
             }
         }
 
@@ -353,6 +377,21 @@ namespace Portly.Runtime
         {
             _logProvider?.Log("Stopping server..");
             _cts.Cancel();  // stop accepting new clients
+
+            if (_tickTask != null)
+            {
+                try
+                {
+                    await _tickTask;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                finally
+                {
+                    _tickTask = null;
+                }
+            }
 
             try
             {
@@ -796,11 +835,23 @@ namespace Portly.Runtime
                 return;
             }
 
-            var task = Router.RouteAsync(connection, packet);
-            if (task != null)
-                await task;
-
             OnPacketReceived?.Invoke(connection, packet);
+
+            if (Router.TryGetRoute(packet, out var route) && route != null && route.Handler != null)
+            {
+                if (route.ExecutionMode == PacketExecutionMode.Tick)
+                {
+                    _simulationQueue.Enqueue(
+                        new QueuedPacket<IServerClient>(
+                            connection,
+                            packet,
+                            route));
+                }
+                else
+                {
+                    await route.Handler(connection, packet);
+                }
+            }
         }
 
         private static bool IsSystemPacket(Packet packet)
