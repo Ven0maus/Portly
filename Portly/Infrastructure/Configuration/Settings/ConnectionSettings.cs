@@ -64,5 +64,20 @@
         /// TCP_NODELAY to reduce latency at the cost of more packets
         /// </summary>
         public bool NoTcpDelay { get; set; } = true;
+
+        /// <summary>
+        /// Target ticks per second (e.g., 60), set to 0 to disable the tick system.
+        /// </summary>
+        public int TickRate { get; set; } = 60;
+
+        /// <summary>
+        /// Milliseconds between warnings when tick is behind schedule.
+        /// </summary>
+        public double TickLagWarningThresholdMs { get; set; } = 10;
+
+        /// <summary>
+        /// Timespan for how often the tick lag warning is shown when behind schedule.
+        /// </summary>
+        public TimeSpan TickLagWarningCooldown { get; set; } = TimeSpan.FromSeconds(5);
     }
 }

@@ -105,7 +105,9 @@ namespace Portly.Transport
 
             _listener = null;
             LocalEndPoint = null;
+            OnServerStarted = null;
             OnServerStopped?.Invoke(this, EventArgs.Empty);
+            OnServerStopped = null;
             return Task.CompletedTask;
         }
 

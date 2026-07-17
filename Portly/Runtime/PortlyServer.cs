@@ -11,6 +11,7 @@ using Portly.Security.Trust;
 using Portly.Transport;
 using Portly.Utilities;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -53,6 +54,9 @@ namespace Portly.Runtime
         private readonly Func<byte[], IEncryptionProvider> _encryptionProvider;
         private readonly ILogProvider? _logProvider;
 
+        private DateTime _lastTickWarning = DateTime.MinValue;
+
+
         /// <summary>
         /// A router that helps with registering packet handlers to handle packets easily based on their identifiers.
         /// </summary>
@@ -78,9 +82,119 @@ namespace Portly.Runtime
         }
 
         /// <summary>
-        /// Populated upon server start.
+        /// The local endpoint of the server's transport.
         /// </summary>
         public EndPoint? LocalEndpoint => _serverTransport.LocalEndPoint;
+
+        /// <summary>
+        /// The TickHandler delegate signature.
+        /// </summary>
+        /// <param name="context">The context of the current tick.</param>
+        public delegate void TickHandler(TickContext context);
+
+        /// <summary>
+        /// Raised every server tick.
+        /// </summary>
+        public event TickHandler? OnTick;
+
+        /// <summary>
+        /// Call this to do manual ticks, this only works if TickRate is 0 in settings.
+        /// </summary>
+        /// <param name="tick">The current tick number</param>
+        /// <param name="fixedDeltaTime">The fixed time step</param>
+        /// <param name="elapsedTime">The real elapsed time step</param>
+        public void Tick(long tick, double? fixedDeltaTime = null, double? elapsedTime = null)
+        {
+            if (Configuration.ConnectionSettings.TickRate > 0)
+            {
+                _logProvider?.Log("Manual tick can only be called when configured TickRate is 0 in the connection settings.");
+                return;
+            }
+
+            OnTick?.Invoke(new TickContext
+            {
+                Tick = tick,
+                FixedDeltaTime = fixedDeltaTime ?? 0,
+                ElapsedTime = elapsedTime ?? fixedDeltaTime ?? 0
+            });
+        }
+
+        /// <summary>
+        /// Runs the server tick loop at the configured rate.
+        /// </summary>
+        /// <returns>A task representing the loop execution.</returns>
+        private async Task StartTickLoopAsync(CancellationToken token)
+        {
+            var tickRate = Configuration.ConnectionSettings.TickRate;
+            if (tickRate <= 0)
+            {
+                _logProvider?.Log("Tick loop disabled because TickRate is 0.");
+                return;
+            }
+
+            var tickLagMsCheckValue = Configuration.ConnectionSettings.TickLagWarningThresholdMs;
+            var tickLagCooldownValue = Configuration.ConnectionSettings.TickLagWarningCooldown;
+
+            var interval = TimeSpan.FromSeconds(1.0 / tickRate);
+            var fixedDeltaTime = interval.TotalSeconds;
+
+            _logProvider?.Log($"Starting tick loop at {tickRate} Hz ({interval.TotalMilliseconds:F2}ms)");
+
+            var stopwatch = Stopwatch.StartNew();
+
+            var nextTick = stopwatch.Elapsed;
+            var previousTickTime = stopwatch.Elapsed;
+
+            long tick = 0;
+
+            while (!token.IsCancellationRequested)
+            {
+                var tickStart = stopwatch.Elapsed;
+
+                var realDeltaTime = (tickStart - previousTickTime).TotalSeconds;
+                previousTickTime = tickStart;
+
+                tick++;
+
+                OnTick?.Invoke(new TickContext
+                {
+                    Tick = tick,
+                    FixedDeltaTime = fixedDeltaTime,
+                    ElapsedTime = realDeltaTime
+                });
+
+                nextTick += interval;
+
+                var remaining = nextTick - stopwatch.Elapsed;
+
+                if (remaining > TimeSpan.Zero)
+                {
+                    try
+                    {
+                        await Task.Delay(remaining, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    var behindMs = -remaining.TotalMilliseconds;
+
+                    nextTick = stopwatch.Elapsed + interval;
+
+                    if (behindMs > tickLagMsCheckValue &&
+                        DateTime.UtcNow - _lastTickWarning > tickLagCooldownValue)
+                    {
+                        _lastTickWarning = DateTime.UtcNow;
+                        _logProvider?.Log($"Server tick is {behindMs:F1}ms behind schedule.");
+                    }
+                }
+            }
+
+            _logProvider?.Log("Tick loop stopped.");
+        }
 
         /// <summary>
         /// Raised when a packet is received from a client.
@@ -107,6 +221,7 @@ namespace Portly.Runtime
         /// Server configuration
         /// </summary>
         public ServerConfiguration Configuration { get; }
+
 
         internal PortlyServer(string? folder = null,
             IServerTransport? serverTransport = null,
@@ -207,6 +322,12 @@ namespace Portly.Runtime
             }
 
             _ = _keepAliveManager.StartAsync(_cts.Token);
+
+            _serverTransport.OnServerStarted += (sender, args) =>
+            {
+                _ = StartTickLoopAsync(_cts.Token);
+            };
+
             return _serverTransport.StartAsync(ipToUse, port.Value, _cts.Token);
         }
 
