@@ -29,13 +29,14 @@ A basic setup involves initializing a server and a client.
 
 **Server Example:**
 ```csharp
-var server = new PortlyServer(new ServerConfiguration());
+// The folder parameter is used to store trust keys
+var server = new PortlyServer("trust_data"); 
 await server.StartAsync();
 ```
 
 **Client Example:**
 ```csharp
-var client = new PortlyClient(new ClientConfiguration());
+var client = new PortlyClient();
 await client.ConnectAsync("127.0.0.1", 8080);
 ```
 
@@ -43,12 +44,18 @@ await client.ConnectAsync("127.0.0.1", 8080);
 ### Sending Packets
 Packets are routed based on `PacketIdentifier` and `PacketRoute`.
 ```csharp
-var packet = new MyPacket(data);
-await client.SendAsync(packet);
+var packet = Packet<MyData>.Create(PacketType.MyAction, new MyData(data));
+await client.SendPacketAsync(packet, encrypt: true);
 ```
 
 ### Handling Packets
-The server routes incoming packets to specific handlers based on the protocol definition.
+The server uses a `Router` to register handlers for specific `PacketType` identifiers.
+```csharp
+server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
+{
+    // Handle logic here
+});
+```
 
 ## Configuration
 Configuration can be managed via `ServerConfiguration` or `ClientConfiguration` objects. Key settings include:
