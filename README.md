@@ -74,7 +74,7 @@ The client will:
 
 #### Server-side
 
-The `Router` is used to register handlers for **incoming** packets. When a client sends a packet, Portly routes it based on its type:
+The `Router` is used to register handlers for **incoming** packets. When a client sends a packet, Portly routes it based on its identifier type:
 
 ```csharp
 // Register a handler for incoming MyAction packets
@@ -83,7 +83,7 @@ server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async
     // Handle the incoming packet from this specific client
 });
 
-// Packets are automatically routed as they arrive - no manual sending via Router
+// Packets are automatically routed as they arrive if their identifier type is registered.
 ```
 
 #### Client-side
@@ -97,7 +97,7 @@ client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async
 });
 ```
 
-To send packets to the server or other clients, use `SendPacketAsync` / `SendToClientAsync` — these methods do not go through the router.
+To send packets to the server or other clients, use `SendPacketAsync` / `SendToClientAsync`.
 
 ### Creating and Sending Custom Packets
 
@@ -109,10 +109,10 @@ public record MyData(int Value, string Name);
 
 var myPayload = new MyData(42, "example");
 
-// Create a packet with your own PacketType enum value
+// Create a packet with your own enum value
 // IMPORTANT: Use an ID higher than the built-in system packets.
-// System packets are: KeepAlive, LiteHandshake, SecureHandshake, Disconnect, ServerTickSync
-// Define your custom type in your project's namespace (NOT in Portly.PacketType)
+// System packets are defined in the portly PacketType enum.
+// Define your custom type in your project's namespace
 public enum MyPacketTypes { /* ... */ CustomCommand = 100 }
 
 var packet = Packet.Create(MyPacketTypes.CustomCommand, myPayload);
@@ -140,9 +140,9 @@ await server.SendToClientAsync(client, packet, encrypt: true);
 
 ### `Router`
 
-- **Purpose**: Routes incoming packets to registered handlers based on their type identifier. This is how Portly delivers messages from clients (to the server) and from the server (to clients).
-- **When to use**: Register handlers here for any packet types you want to receive. Do NOT use this to send packets — use `SendPacketAsync` / `SendToClientAsync` instead.
-- **Related APIs**: `PacketExecutionMode.Immediate`, `PacketExecutionMode.Tick`
+- **Purpose**: Routes incoming packets to registered handlers based on their type identifier.
+- **When to use**: Register handlers here for any packet types you want to automatically route to a handler.
+- **Related Parameters**: `PacketExecutionMode.Immediate`, `PacketExecutionMode.Tick`
 
 ### Server Events
 
@@ -256,7 +256,7 @@ You can also set IP whitelist/blacklist to restrict which addresses may connect.
 
 ### Adding Custom Packet Types
 
-1. Define a new entry in `PacketType` enum (in `Portly/Protocol/PacketType.cs`)
+1. Define a new enum in your project for your packet types
 2. Create a record or class for your packet payload
 3. Register a handler via `Router.Register()` with your chosen execution mode
 
@@ -264,14 +264,14 @@ Example:
 
 ```csharp
 // 1. Add to PacketType enum
-public enum PacketType { /* ... */ MyCustomCommand }
+public enum CustomPacketType { /* ... */ MyCustomCommand }
 
 // 2. Define payload (must be MessagePack-serializable)
 public record MyCustomCommand(string Action, int Parameter);
 
 // 3. Register handler on server
 server.Router.Register(
-    PacketType.MyCustomCommand, 
+    CustomPacketType.MyCustomCommand, 
     PacketExecutionMode.Immediate,
     async (client, packet) => 
     {
@@ -299,16 +299,7 @@ Implement `ILogProvider` and pass it when constructing `PortlyServer`. All inter
 | "Handshake timed out" | Client didn't send a valid lite handshake within timeout | Increase `ConnectTimeoutSeconds` in config, or ensure client sends the required packets |
 | "IP is not whitelisted" | Server has an IP whitelist and the connecting address isn't included | Add the IP to `Configuration.IpWhitelist` before starting |
 | "Rate limit exceeded" | Too many bytes received from a single IP in the configured window | The client will be disconnected; reduce incoming traffic or adjust rate limits |
-| Packet handlers not firing | Handler wasn't registered, or packet type is reserved (system packets) | Verify `Router.Register()` was called before any packets arrive; use IDs > `_highestSystemPacketId` for custom types |
-
-## Development
-
-Build and test the library:
-
-```bash
-dotnet build -c Release
-dotnet test
-```
+| Packet handlers not firing | Handler wasn't registered, or packet type is reserved (system packets) | Verify `Router.Register()` was called before any packets arrive; use IDs > `100` for custom types |
 
 ## License
 
