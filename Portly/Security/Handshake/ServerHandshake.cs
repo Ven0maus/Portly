@@ -13,5 +13,14 @@ namespace Portly.Security.Handshake
 
         [Key(2)]
         public Guid ClientId { get; set; }
+
+        [Key(3)]
+        public int TickRate { get; set; }
+
+        [Key(4)]
+        public long CurrentTick { get; set; }
+
+        [Key(5)]
+        public long ServerTimestamp { get; set; }
     }
 }

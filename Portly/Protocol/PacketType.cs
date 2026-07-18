@@ -5,6 +5,7 @@
         KeepAlive,
         LiteHandshake,
         SecureHandshake,
-        Disconnect
+        Disconnect,
+        ServerTickSync
     }
 }

@@ -9,6 +9,7 @@ using Portly.Security.Handshake;
 using Portly.Security.Trust;
 using Portly.Transport;
 using Portly.Utilities;
+using Portly.Utilities.Portly.Utilities;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -59,6 +60,11 @@ namespace Portly.Runtime
             new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60),
                 async (client) => await client.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>()), false),
                 async (client) => await client.DisconnectAsync());
+
+        /// <summary>
+        /// The client tick clock.
+        /// </summary>
+        public TickClock TickClock { get; }
 
         /// <summary>
         /// Router to add automatic packet routing.
@@ -124,6 +130,8 @@ namespace Portly.Runtime
             _logProvider = logProvider;
             _packetRouter = new(logProvider);
 
+            TickClock = new TickClock(1);
+
             RegisterPredefinedRoutes();
         }
 
@@ -155,6 +163,24 @@ namespace Portly.Runtime
                     reason = ((Packet<string>)packet).Payload;
                 await OnServerDisconnectedAsync(reason);
             });
+
+            Router.Register(
+                PacketType.ServerTickSync,
+                PacketExecutionMode.Immediate,
+                async (client, packet) =>
+                {
+                    var sync =
+                        packet.As<ServerTickSyncPacket>().Payload;
+
+                    if (TickClock.TickRate != sync.ServerTickRate)
+                    {
+                        TickClock.Configure(sync.ServerTickRate);
+                    }
+
+                    TickClock.Synchronize(sync.Tick, sync.ServerTimestamp);
+
+                    await Task.CompletedTask;
+                });
         }
 
         /// <inheritdoc/>
@@ -401,7 +427,7 @@ namespace Portly.Runtime
                 new LiteHandshake
                 {
                     Protocol = Encoding.UTF8.GetBytes(_packetProtocol.GetType().Name),
-                    ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version)
+                    ProtocolVersion = VersionUtils.ToBytes(_packetProtocol.Version),
                 }), false);
 
             var result = await _packetProtocol.ReceiveSinglePacketAsync(stream, token);
@@ -461,7 +487,10 @@ namespace Portly.Runtime
                 keyExchange.PublicKey,
                 response.Payload.ServerEphemeralKey,
                 clientHandshake.Protocol,
-                clientHandshake.ProtocolVersion
+                clientHandshake.ProtocolVersion,
+                BitConverter.GetBytes(response.Payload.TickRate),
+                BitConverter.GetBytes(response.Payload.CurrentTick),
+                BitConverter.GetBytes(response.Payload.ServerTimestamp)
             );
 
             if (!ecdsa.VerifyData(signedData, response.Payload.Signature, HashAlgorithmName.SHA256))
@@ -473,6 +502,10 @@ namespace Portly.Runtime
 
             // Assign client id
             ServerClientId = response.Payload.ClientId;
+
+            // Sync tick clock
+            TickClock.Configure(response.Payload.TickRate);
+            TickClock.Synchronize(response.Payload.CurrentTick, response.Payload.ServerTimestamp);
         }
     }
 }
