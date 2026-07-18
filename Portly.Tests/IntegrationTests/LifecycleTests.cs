@@ -356,7 +356,12 @@ namespace Portly.Tests.IntegrationTests
 
             await clients.ConnectAllAsync(LocalHost, host.Port, host);
 
-            var serverClients = host.Server.ConnectedClients.ToArray();
+            var serverClients = host.Server.ConnectedClients.ToDictionary(c => c.Id);
+
+            var targetClients = clients.Clients
+                .Take(2)
+                .Select(c => serverClients[c.Client.ServerClientId])
+                .ToArray();
 
             var receiveA = clients.Clients[0]
                 .WaitForPacketAsync<string>(PacketType.Custom);
@@ -367,8 +372,7 @@ namespace Portly.Tests.IntegrationTests
             await host.Server.SendToClientsAsync(
                 Packet.Create(PacketType.Custom, "targeted"),
                 false,
-                serverClients[0],
-                serverClients[1]);
+                targetClients);
 
             var results = await Task.WhenAll(receiveA, receiveB);
 
