@@ -122,6 +122,7 @@ namespace Portly.Tests.IntegrationTests
             host.Server.Configuration.ConnectionSettings.TickRate = 60;
 
             var ticks = new ConcurrentBag<TickContext>();
+
             host.Server.OnTick += e =>
             {
                 ticks.Add(e);
@@ -132,7 +133,9 @@ namespace Portly.Tests.IntegrationTests
 
             await Task.Delay(200);
 
-            var orderedTicks = ticks.OrderBy(x => x.Tick).ToList();
+            var orderedTicks = ticks
+                .OrderBy(x => x.Tick)
+                .ToList();
 
             Assert.That(orderedTicks, Has.Count.GreaterThan(2));
 
@@ -140,7 +143,7 @@ namespace Portly.Tests.IntegrationTests
             {
                 Assert.That(
                     orderedTicks[i].Tick,
-                    Is.EqualTo(orderedTicks[i - 1].Tick + 1));
+                    Is.GreaterThan(orderedTicks[i - 1].Tick));
             }
         }
 

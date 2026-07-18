@@ -16,7 +16,6 @@
 
             // Client synchronization data
             private long _serverTick;
-            private long _lastSyncTimestampMs;
             private long _serverTimeOffsetMs;
 
             private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
@@ -138,7 +137,6 @@
                     ref _serverTimeOffsetMs,
                     clockOffset);
 
-                _lastSyncTimestampMs = localTimestamp;
                 _stopwatch.Restart();
             }
         }

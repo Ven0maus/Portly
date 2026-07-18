@@ -799,9 +799,7 @@ namespace Portly.Runtime
 
                 _logProvider?.Log($"[{connection.Id}]: Exception:", LogLevel.Error);
                 PrintException(ex);
-            }
-            finally
-            {
+
                 await connection.DisconnectInternalAsync();
                 _clients.TryRemove(connection.Id, out _);
             }
