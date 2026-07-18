@@ -1,6 +1,7 @@
 <Solution>
-  <Project Path="Portly.ExampleClient/Portly.ExampleClient.csproj" />
-  <Project Path="Portly.ExampleServer/Portly.ExampleServer.csproj" />
+  <Folder Name="/Demos/">
+    <Project Path="Demos/Portly.Chatbox/Portly.Chatbox.csproj" Id="bf68d994-34bd-4020-b3fb-94165a9557b4" />
+  </Folder>
   <Project Path="Portly.Tests/Portly.Tests.csproj" Id="160f3a2e-9b64-4e25-a521-6a0ba1dd6f88" />
   <Project Path="Portly/Portly.csproj" />
 </Solution>
