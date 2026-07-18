@@ -50,7 +50,7 @@ namespace Portly.Tests.Helpers
 
         public async Task SendAllAsync(Packet packet, bool encrypt)
         {
-            await Server.SendToClientsAsync(packet, encrypt);
+            await Server.SendToAllClientsAsync(packet, encrypt);
         }
 
         public async Task<Packet> WaitForPacketAsync(TestClientHost client, Enum identifier)

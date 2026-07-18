@@ -345,5 +345,59 @@ namespace Portly.Tests.IntegrationTests
             // Attempt to reconnect and verify that we cannot
             Assert.ThrowsAsync<Exception>(async () => await client.ConnectAsync(LocalHost, host.Port, host));
         }
+
+        [Test]
+        public async Task Server_Should_Send_Packet_To_Selected_Clients_Only()
+        {
+            await using var host = new TestServerHost(ServerDirectory);
+            await host.StartAsync();
+
+            await using var clients = new TestClientGroup(ClientDirectory, 3);
+
+            await clients.ConnectAllAsync(LocalHost, host.Port, host);
+
+            var serverClients = host.Server.ConnectedClients.ToArray();
+
+            var receiveA = clients.Clients[0]
+                .WaitForPacketAsync<string>(PacketType.Custom);
+
+            var receiveB = clients.Clients[1]
+                .WaitForPacketAsync<string>(PacketType.Custom);
+
+            await host.Server.SendToClientsAsync(
+                Packet.Create(PacketType.Custom, "targeted"),
+                false,
+                serverClients[0],
+                serverClients[1]);
+
+            var results = await Task.WhenAll(receiveA, receiveB);
+
+            Assert.That(results, Is.EqualTo(["targeted", "targeted"]));
+        }
+
+        [Test]
+        public async Task Server_Should_Not_Send_Duplicate_Packets_To_Same_Client()
+        {
+            await using var host = new TestServerHost(ServerDirectory);
+            await host.StartAsync();
+
+            await using var client = new TestClientHost(ClientDirectory);
+
+            await client.ConnectAsync(LocalHost, host.Port, host);
+
+            var serverClient = host.Server.ConnectedClients.Single();
+
+            var receive = client.WaitForPacketAsync<string>(PacketType.Custom);
+
+            await host.Server.SendToClientsAsync(
+                Packet.Create(PacketType.Custom, "once"),
+                false,
+                serverClient,
+                serverClient);
+
+            var result = await receive;
+
+            Assert.That(result, Is.EqualTo("once"));
+        }
     }
 }

@@ -611,32 +611,109 @@ namespace Portly.Runtime
         /// <param name="packet"></param>
         /// <param name="encrypt"></param>
         /// <returns></returns>
-        public async Task SendToClientsAsync(Packet packet, bool encrypt)
+        public async Task SendToAllClientsAsync(Packet packet, bool encrypt)
         {
             if (IsSystemPacket(packet))
-                throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
+            {
+                throw new ArgumentException(
+                    $"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".",
+                    nameof(packet));
+            }
 
-            var tasks = _clients.Values.ToArray()
-                .Select(async client =>
+            var clients = _clients.Values.ToArray();
+
+            await Parallel.ForEachAsync(
+                clients,
+                new ParallelOptions
                 {
-                    if (await _broadcastSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
+                    MaxDegreeOfParallelism = 64
+                },
+                async (client, _) =>
+                {
+                    try
                     {
+                        await client.SendPacketAsync(packet, encrypt, _cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logProvider?.Log(
+                            $"Failed sending packet {packet.Identifier.Id} to {client.Id}: {ex}");
+
                         try
                         {
-                            await client.SendPacketAsync(packet, encrypt);
+                            await client.DisconnectInternalAsync();
                         }
-                        catch (Exception)
+                        catch (Exception disconnectException)
                         {
-                            try { await client.DisconnectInternalAsync(); } catch { }
-                        }
-                        finally
-                        {
-                            _broadcastSemaphore.Release();
+                            _logProvider?.Log(
+                                $"Failed disconnecting client {client.Id}: {disconnectException}");
                         }
                     }
                 });
+        }
 
-            await Task.WhenAll(tasks);
+        /// <summary>
+        /// Sends a packet to a collection of clients.
+        /// </summary>
+        /// <param name="packet"></param>
+        /// <param name="encrypt"></param>
+        /// <param name="serverClients"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public async Task SendToClientsAsync(
+            Packet packet,
+            bool encrypt,
+            params IServerClient[] serverClients)
+        {
+            if (IsSystemPacket(packet))
+            {
+                throw new ArgumentException(
+                    $"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".",
+                    nameof(packet));
+            }
+
+            if (serverClients == null || serverClients.Length == 0)
+                return;
+
+            var clients = serverClients
+                .DistinctBy(x => x.Id)
+                .Select(x =>
+                {
+                    _clients.TryGetValue(x.Id, out var client);
+                    return client;
+                })
+                .Where(x => x != null)
+                .Cast<ServerClient>()
+                .ToArray();
+
+            await Parallel.ForEachAsync(
+                clients,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 64
+                },
+                async (client, _) =>
+                {
+                    try
+                    {
+                        await client.SendPacketAsync(packet, encrypt, _cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logProvider?.Log(
+                            $"Failed sending packet {packet.Identifier.Id} to {client.Id}: {ex}");
+
+                        try
+                        {
+                            await client.DisconnectInternalAsync();
+                        }
+                        catch (Exception disconnectException)
+                        {
+                            _logProvider?.Log(
+                                $"Failed disconnecting client {client.Id}: {disconnectException}");
+                        }
+                    }
+                });
         }
 
         /// <summary>
@@ -649,11 +726,32 @@ namespace Portly.Runtime
         /// <exception cref="KeyNotFoundException"></exception>
         public async Task SendToClientAsync(IServerClient serverClient, Packet packet, bool encrypt)
         {
+            ArgumentNullException.ThrowIfNull(serverClient);
+            ArgumentNullException.ThrowIfNull(packet);
+
             if (IsSystemPacket(packet))
                 throw new ArgumentException($"PacketIdentifier \"{packet.Identifier.Id}\" is a reserved id, please use an ID higher than \"{_highestSystemPacketId}\".", nameof(packet));
 
             if (_clients.TryGetValue(serverClient.Id, out var client))
-                await client.SendPacketAsync(packet, encrypt);
+            {
+                try
+                {
+                    await client.SendPacketAsync(packet, encrypt);
+                }
+                catch (Exception ex)
+                {
+                    _logProvider?.Log($"[{client.Id}]: Failed sending packet {packet.Identifier.Id}: {ex}", LogLevel.Error);
+
+                    try
+                    {
+                        await client.DisconnectInternalAsync();
+                    }
+                    catch (Exception disconnectException)
+                    {
+                        _logProvider?.Log($"[{client.Id}]: Failed disconnecting after send failure: {disconnectException}", LogLevel.Warning);
+                    }
+                }
+            }
             else
                 _logProvider?.Log($"[{serverClient.Id}]: Failed to send packet, not connected.", LogLevel.Warning);
         }
