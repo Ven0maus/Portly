@@ -22,24 +22,6 @@ Portly is organized into five layers:
 | **Infrastructure** | Rate limiters, logging providers, configuration management, and tick synchronization |
 | **Runtime** | High-level `PortlyServer` and `PortlyClient` implementations that wire everything together |
 
-## Installation
-
-Add the Portly package to your project:
-
-```bash
-dotnet add package Portly
-```
-
-Or reference it directly in your `.csproj`:
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="../Portly/Portly.csproj" />
-  </ItemGroup>
-</Project>
-```
-
 ## Quick Start
 
 ### Starting a Server
