@@ -1,100 +1,60 @@
 # Portly
-Portly is a lightweight server-client architecture designed for small, self-hosted community servers. It implements a **Trust-On-First-Use (TOFU)** security model, providing a balance between ease of use and secure communication for decentralized environments.
 
-## Features
-- **TOFU Security**: Seamless trust establishment on the first connection with persistent security.
-- **Packet Routing**: Built-in `PacketRouter` to handle multiple message types and destinations on both client and server.
-- **Rate Limiting**: Infrastructure for protecting servers from request flooding.
-- **Replay Protection**: Safeguards against repeated packet injection.
-- **Multi-Transport Support**: Pluggable transport layer (e.g., TCP).
-- **Customizable Serialization**: Supports MessagePack and other serialization providers.
+Portly is a lightweight, secure .NET server-client architecture designed for small community servers. It features a decoupled design that separates core abstractions, security protocols, and infrastructure concerns.
+
+## Key Features
+
+- **TOFU Security**: Trust-On-First-Use model for seamless and secure connection establishment.
+- **Packet Routing**: A built-in `PacketRouter` for handling multiple message types and destinations.
+- **Tick System**: Synchronized `TickClock` for consistent simulation logic between server and client.
+- **Traffic Protection**: Built-in rate limiting and replay protection.
+- **Pluggable Architecture**: Supports multiple transport layers (e.g., TCP), serialization providers (MessagePack, JSON, XML), and logging providers.
 
 ## Architecture
-Portly is built on a decoupled architecture separating concerns into distinct layers:
-- **Abstractions**: Defines core interfaces (`IClient`, `IServer`, `ITransportConnection`).
-- **Protocol**: Handles packet definitions, routing, and serialization.
-- **Security**: Manages handshakes, encryption (AES), and trust logic.
-- **Infrastructure**: Provides cross-cutting concerns like Logging, Rate Limiting, and Tick Synchronization.
+
+- **Abstractions**: Core interfaces for clients, servers, transport, and serialization.
+- **Protocol**: Packet definitions, routing, and length-prefixed processing.
+- **Security**: Handshaking, AES encryption, and trust management.
+- **Infrastructure**: Rate limiting, logging, configuration, and tick synchronization.
 - **Runtime**: High-level `PortlyServer` and `PortlyClient` implementations.
 
-## Installation
-Portly is a .NET library. You can integrate it into your project via NuGet (or by referencing the project file):
-
-```bash
-dotnet add package Portly
-```
-
 ## Quick Start
-A basic setup involves initializing a server and a client.
 
-**Server Example:**
+### Server
 ```csharp
-// The folder parameter is used to store trust keys
 var server = new PortlyServer("trust_data"); 
 await server.StartAsync();
 ```
 
-**Client Example:**
+### Client
 ```csharp
 var client = new PortlyClient();
 await client.ConnectAsync("127.0.0.1", 8080);
 ```
 
 ## Usage
-### Sending Packets
-Packets are routed based on `PacketIdentifier` and `PacketRoute`.
-```csharp
-var packet = Packet<MyData>.Create(PacketType.MyAction, new MyData(data));
-await client.SendPacketAsync(packet, encrypt: true);
-```
 
-### Handling Packets
-Both the `PortlyClient` and `PortlyServer` expose a `Router` property. You can register handlers for specific `PacketType` identifiers to automatically route incoming packets to the correct logic.
+### Sending/Handling Packets
+Register handlers on the `Router` to process specific `PacketType` identifiers:
 
-**Server Registration:**
 ```csharp
+// Server
 server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle server-side logic
+    // Handle logic
 });
-```
 
-**Client Registration:**
-```csharp
+// Client
 client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle client-side logic
+    // Handle logic
 });
 ```
 
-### Tick System
-Portly includes a `TickClock` for synchronized simulation logic.
-- **Server**: The `PortlyServer` runs a background tick loop at a configured frequency. You can subscribe to the `OnTick` event to execute logic every tick.
-- **Client**: The `PortlyClient` synchronizes its `TickClock` with the server's clock during the handshake, ensuring both sides are aligned for time-sensitive operations.
-
-## Configuration
-Configuration can be managed via `ServerConfiguration` or `ClientConfiguration` objects. Key settings include:
-- **Connection**: Host, port, and keep-alive settings.
-- **Rate Limits**: Define thresholds for client requests.
-- **Serialization**: Choose between `JsonProvider` or `MessagePackSerializationProvider`.
-- **Logging**: Configure `LogProvider` (Console, File, or Composite).
-
 ## Development
-### Build
-```bash
-dotnet build -c Release
-```
 
-### Test
-```bash
-dotnet test
-```
-
-### Contributing
-1. Fork the repository.
-2. Create a feature branch.
-3. Ensure all tests pass.
-4. Submit a Pull Request.
+- **Build**: `dotnet build -c Release`
+- **Test**: `dotnet test`
 
 ## License
-[Check the LICENSE file for details]
+See the LICENSE file for details.
