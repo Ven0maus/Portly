@@ -35,7 +35,7 @@ namespace Portly.Tests.IntegrationTests
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(firstTick.Tick, Is.GreaterThan(0));
+                Assert.That(firstTick.ElapsedTime, Is.EqualTo(firstTick.FixedDeltaTime).Within(0.001));
                 Assert.That(firstTick.FixedDeltaTime, Is.EqualTo(0.05).Within(0.01));
                 Assert.That(firstTick.ElapsedTime, Is.GreaterThan(0));
             }
@@ -328,6 +328,36 @@ namespace Portly.Tests.IntegrationTests
             await Task.Delay(200);
 
             Assert.That(ticks, Is.EqualTo(stoppedCount));
+        }
+
+        [Test]
+        public async Task TickLoop_ShouldLogTelemetry_WhenTickExecutionExceedsBudget()
+        {
+            await using var host = new TestServerHost(ServerDirectory);
+
+            host.Server.Configuration.ConnectionSettings.TickRate = 60; // 16.67ms budget
+            host.Server.Configuration.ConnectionSettings.TickLagWarningThresholdMs = 1;
+            host.Server.Configuration.ConnectionSettings.TickLagWarningCooldown = TimeSpan.FromMilliseconds(1);
+
+            var telemetryDetected = new TaskCompletionSource();
+
+            host.LogProvider.OnLog += (sender, message) =>
+            {
+                if (message.Contains("Tick telemetry"))
+                {
+                    telemetryDetected.TrySetResult();
+                }
+            };
+
+            host.Server.OnTick += _ =>
+            {
+                Thread.Sleep(100); // exceed 16.67ms budget
+                return ValueTask.CompletedTask;
+            };
+
+            await host.StartAsync();
+
+            await telemetryDetected.Task.WaitAsync(TimeSpan.FromSeconds(2));
         }
     }
 }

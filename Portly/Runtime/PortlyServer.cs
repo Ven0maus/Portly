@@ -56,8 +56,8 @@ namespace Portly.Runtime
         private readonly ConcurrentQueue<QueuedPacket<IServerClient>> _simulationQueue = new();
         private Task? _tickTask;
 
-        private DateTime _lastTickWarning = DateTime.MinValue;
-
+        private TimeSpan _lastTickWarning = TimeSpan.Zero;
+        private TimeSpan _lastTickTelemetry = TimeSpan.Zero;
 
         /// <summary>
         /// A router that helps with registering packet handlers to handle packets easily based on their identifiers.
@@ -272,25 +272,69 @@ namespace Portly.Runtime
 
             long tick = 0;
 
+            // Telemetry
+            long lateTicks = 0;
+            long telemetryTickCount = 0;
+
+            double averageExecutionMs = 0;
+            double averageDriftMs = 0;
+
+            double maxExecutionMs = 0;
+            double maxDriftMs = 0;
+            double maxStallMs = 0;
+
+            long driftSampleCount = 0;
+            bool firstTick = true;
+
             while (!token.IsCancellationRequested)
             {
                 var tickStart = stopwatch.Elapsed;
 
-                var realDeltaTime = (tickStart - previousTickTime).TotalSeconds;
+                var realDeltaTime = firstTick
+                    ? fixedDeltaTime
+                    : (tickStart - previousTickTime).TotalSeconds;
+
+                firstTick = false;
                 previousTickTime = tickStart;
 
                 tick++;
 
-                await InvokeTickAsync(new TickContext
+                var executionStart = stopwatch.Elapsed;
+
+                try
                 {
-                    Tick = tick,
-                    FixedDeltaTime = fixedDeltaTime,
-                    ElapsedTime = realDeltaTime
-                });
+                    await InvokeTickAsync(new TickContext
+                    {
+                        Tick = tick,
+                        FixedDeltaTime = fixedDeltaTime,
+                        ElapsedTime = realDeltaTime
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logProvider?.Log(
+                        $"Exception during tick {tick}: {ex.Message}",
+                        LogLevel.Error);
+                }
+
+                var executionTime = stopwatch.Elapsed - executionStart;
+                var executionMs = executionTime.TotalMilliseconds;
+
+                // Execution metrics
+                telemetryTickCount++;
+
+                averageExecutionMs +=
+                    (executionMs - averageExecutionMs) / telemetryTickCount;
+
+                if (executionMs > maxExecutionMs)
+                    maxExecutionMs = executionMs;
+
 
                 nextTick += interval;
 
                 var remaining = nextTick - stopwatch.Elapsed;
+
+                double driftMs = 0;
 
                 if (remaining > TimeSpan.Zero)
                 {
@@ -305,20 +349,75 @@ namespace Portly.Runtime
                 }
                 else
                 {
-                    var behindMs = -remaining.TotalMilliseconds;
+                    driftMs = -remaining.TotalMilliseconds;
+
+                    lateTicks++;
+
+                    if (driftMs > maxDriftMs)
+                        maxDriftMs = driftMs;
+
+                    if (driftMs > maxStallMs)
+                        maxStallMs = driftMs;
 
                     nextTick = stopwatch.Elapsed + interval;
 
-                    if (behindMs > tickLagMsCheckValue &&
-                        DateTime.UtcNow - _lastTickWarning > tickLagCooldownValue)
+                    var tickOverBudget = executionMs > interval.TotalMilliseconds;
+                    var tickBehindSchedule = driftMs > tickLagMsCheckValue;
+
+                    if ((tickBehindSchedule || tickOverBudget) &&
+                        stopwatch.Elapsed - _lastTickWarning > tickLagCooldownValue)
                     {
-                        _lastTickWarning = DateTime.UtcNow;
-                        _logProvider?.Log($"Server tick is {behindMs:F1}ms behind schedule.");
+                        _lastTickWarning = stopwatch.Elapsed;
+                        _logProvider?.Log($"Server tick is {driftMs:F1}ms behind schedule.");
                     }
+                }
+
+                // Drift average
+                if (driftMs > 0)
+                {
+                    driftSampleCount++;
+                    averageDriftMs += (driftMs - averageDriftMs) / driftSampleCount;
+                }
+
+                if ((maxDriftMs > tickLagMsCheckValue ||
+                    maxExecutionMs > interval.TotalMilliseconds) &&
+                    stopwatch.Elapsed - _lastTickTelemetry > tickLagCooldownValue)
+                {
+                    if (telemetryTickCount > 0)
+                    {
+                        _lastTickTelemetry = stopwatch.Elapsed;
+
+                        var tickBudgetMs = interval.TotalMilliseconds;
+
+                        var budgetUsage =
+                            (averageExecutionMs / tickBudgetMs) * 100;
+
+                        _logProvider?.Log(
+                            $"Tick telemetry:\n" +
+                            $"Ticks: {telemetryTickCount}\n" +
+                            $"Target: {tickRate}Hz ({tickBudgetMs:F2}ms budget)\n" +
+                            $"Execution Avg: {averageExecutionMs:F2}ms\n" +
+                            $"Execution Max: {maxExecutionMs:F2}ms\n" +
+                            $"Budget Usage Avg: {budgetUsage:F1}%\n" +
+                            $"Drift Avg: {averageDriftMs:F2}ms\n" +
+                            $"Drift Max: {maxDriftMs:F2}ms\n" +
+                            $"Late Ticks: {lateTicks} ({(double)lateTicks / telemetryTickCount:P2})\n" +
+                            $"Max Stall: {maxStallMs:F2}ms");
+                    }
+
+                    telemetryTickCount = 0;
+                    lateTicks = 0;
+                    averageExecutionMs = 0;
+                    averageDriftMs = 0;
+                    maxExecutionMs = 0;
+                    maxDriftMs = 0;
+                    maxStallMs = 0;
+                    driftSampleCount = 0;
                 }
             }
 
-            _logProvider?.Log("Tick loop stopped.");
+            _logProvider?.Log(
+                $"Tick loop stopped. Total ticks: {tick}");
         }
 
         /// <summary>

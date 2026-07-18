@@ -80,11 +80,14 @@ namespace Portly.Infrastructure.Configuration
             if (ConnectionSettings.WriteTimeoutSeconds <= 0)
                 errors.Add($"WriteTimeoutSeconds is invalid ({ConnectionSettings.WriteTimeoutSeconds}), must be > 0");
 
+            if (ConnectionSettings.TickRate < 0)
+                errors.Add($"TickRate is invalid ({ConnectionSettings.TickRate}), must be >= 0");
+
             if (ConnectionSettings.TickLagWarningThresholdMs <= 0)
-                errors.Add($"TickRate is invalid ({ConnectionSettings.TickLagWarningThresholdMs}), must be > 0");
+                errors.Add($"TickLagWarningThresholdMs is invalid ({ConnectionSettings.TickLagWarningThresholdMs}), must be > 0");
 
             if (ConnectionSettings.TickLagWarningCooldown <= TimeSpan.Zero)
-                errors.Add($"TickIntervalMs is invalid ({ConnectionSettings.TickLagWarningCooldown}), must be > zero seconds");
+                errors.Add($"TickLagWarningCooldown is invalid ({ConnectionSettings.TickLagWarningCooldown}), must be > zero seconds");
 
             if (ConnectionSettings.KeepAliveIntervalSeconds <= 0)
                 errors.Add($"KeepAliveIntervalSeconds is invalid ({ConnectionSettings.KeepAliveIntervalSeconds}), must be > 0");
