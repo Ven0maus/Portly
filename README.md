@@ -3,7 +3,7 @@ Portly is a lightweight server-client architecture designed for small, self-host
 
 ## Features
 - **TOFU Security**: Seamless trust establishment on the first connection with persistent security.
-- **Packet Routing**: Built-in `PacketRouter` to handle multiple message types and destinations.
+- **Packet Routing**: Built-in `PacketRouter` to handle multiple message types and destinations on both client and server.
 - **Rate Limiting**: Infrastructure for protecting servers from request flooding.
 - **Replay Protection**: Safeguards against repeated packet injection.
 - **Multi-Transport Support**: Pluggable transport layer (e.g., TCP).
@@ -49,16 +49,31 @@ await client.SendPacketAsync(packet, encrypt: true);
 ```
 
 ### Handling Packets
-The server uses a `Router` to register handlers for specific `PacketType` identifiers.
+Both the `PortlyClient` and `PortlyServer` expose a `Router` property. You can register handlers for specific `PacketType` identifiers to automatically route incoming packets to the correct logic.
+
+**Server Registration:**
 ```csharp
 server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle logic here
+    // Handle server-side logic
 });
 ```
 
+**Client Registration:**
+```csharp
+client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
+{
+    // Handle client-side logic
+});
+```
+
+### Tick System
+Portly includes a `TickClock` for synchronized simulation logic.
+- **Server**: The `PortlyServer` runs a background tick loop at a configured frequency. You can subscribe to the `OnTick` event to execute logic every tick.
+- **Client**: The `PortlyClient` synchronizes its `TickClock` with the server's clock during the handshake, ensuring both sides are aligned for time-sensitive operations.
+
 ## Configuration
-Configuration can be managed via `ServerConfiguration` object. Key settings include:
+Configuration can be managed via `ServerConfiguration` or `ClientConfiguration` objects. Key settings include:
 - **Connection**: Host, port, and keep-alive settings.
 - **Rate Limits**: Define thresholds for client requests.
 - **Serialization**: Choose between `JsonProvider` or `MessagePackSerializationProvider`.
