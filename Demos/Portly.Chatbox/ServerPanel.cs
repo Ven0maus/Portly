@@ -1,8 +1,8 @@
 namespace Portly.Chatbox
 {
-    public partial class ChatboxMain : Form
+    public partial class ServerPanel : Form
     {
-        public ChatboxMain()
+        public ServerPanel()
         {
             InitializeComponent();
         }
