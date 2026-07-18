@@ -4,113 +4,305 @@ Portly is a lightweight, secure .NET server-client architecture designed for sma
 
 ## Key Features
 
-- **TOFU Security**: Trust-On-First-Use model for seamless and secure connection establishment.
-- **Packet Routing**: A built-in `PacketRouter` for handling multiple message types and destinations.
-- **Tick System**: Synchronized `TickClock` for consistent simulation logic between server and client.
-- **Traffic Protection**: Built-in rate limiting and replay protection.
-- **Pluggable Architecture**: Supports multiple transport layers (e.g., TCP), serialization providers (MessagePack, JSON, XML), and logging providers.
+- **TOFU Security**: Trust-On-First-Use model for seamless and secure connection establishment
+- **Packet Routing**: Built-in router for handling multiple message types and destinations
+- **Tick System**: Synchronized `TickClock` for consistent simulation logic between server and client
+- **Traffic Protection**: Rate limiting, replay protection, and IP whitelist/blacklist support
+- **Pluggable Architecture**: Supports TCP transport, MessagePack serialization, AES encryption, and custom logging providers
 
 ## Architecture
 
-- **Abstractions**: Core interfaces for clients, servers, transport, and serialization.
-- **Protocol**: Packet definitions, routing, and length-prefixed processing.
-- **Security**: Handshaking, AES encryption, and trust management.
-- **Infrastructure**: Rate limiting, logging, configuration, and tick synchronization.
-- **Runtime**: High-level `PortlyServer` and `PortlyClient` implementations.
+Portly is organized into five layers:
+
+| Layer | Purpose |
+|-------|---------|
+| **Abstractions** | Core interfaces for clients, servers, transport connections, and packet handling |
+| **Protocol** | Packet definitions (`Packet`, `PacketIdentifier`), routing logic, and length-prefixed binary processing |
+| **Security** | Handshake protocols (lite and secure), ECDH key exchange, AES encryption, and server identity verification |
+| **Infrastructure** | Rate limiters, logging providers, configuration management, and tick synchronization |
+| **Runtime** | High-level `PortlyServer` and `PortlyClient` implementations that wire everything together |
+
+## Installation
+
+Add the Portly package to your project:
+
+```bash
+dotnet add package Portly
+```
+
+Or reference it directly in your `.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Portly/Portly.csproj" />
+  </ItemGroup>
+</Project>
+```
 
 ## Quick Start
 
-### Server
+### Starting a Server
+
 ```csharp
+using Portly.Runtime;
+
 var server = new PortlyServer();
-await server.StartAsync();
+await server.StartAsync(); // Listens on configured IP and port
 ```
 
-### Client
+The server will automatically:
+- Accept incoming TCP connections
+- Perform the TOFU handshake to establish trust
+- Begin processing packets from connected clients
+
+### Connecting a Client
+
 ```csharp
+using Portly.Runtime;
+
 var client = new PortlyClient();
 await client.ConnectAsync("127.0.0.1", 8080);
 ```
 
-### Server
-```csharp
-var server = new PortlyServer();
-await server.StartAsync();
-```
+The client will:
+- Connect to the server's endpoint
+- Complete the handshake (including secure key exchange)
+- Begin sending and receiving packets
 
-### Client
-```csharp
-var client = new PortlyClient();
-await client.ConnectAsync("127.0.0.1", 8080);
-```
+### Sending Packets
 
-### Usage
+#### Server-side
 
-#### Server
-```csharp
-var server = new PortlyServer();
-await server.StartAsync();
-```
-
-### Client
-```csharp
-var client = new PortlyClient();
-await client.ConnectAsync("127.0.0.1", 8080);
-```
-
-### Usage
-
-#### Sending/Handling Packets
-Register handlers on the `Router` to process specific `PacketType` identifiers:
+After a client connects, you can send packets using the `Router`:
 
 ```csharp
-// Server
+// Register a handler for a custom packet type
 server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle logic
+    // Handle incoming MyAction packet from this client
 });
 
-// Client
+// Later, when a packet arrives, it will be routed automatically
+```
+
+#### Client-side
+
+The client has the same router for outgoing packets:
+
+```csharp
 client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle logic
+    // Handle logic - typically you'd forward to the server or process locally
 });
 ```
 
-#### Example: Sending a Custom Packet
-To send a packet, use the `SendPacketAsync` method. The `encrypt` parameter should be set based on your requirements (usually `true` for data packets).
+### Creating and Sending Custom Packets
+
+Portly uses a generic `Packet<T>` type. Any object that MessagePack can serialize is valid as payload:
 
 ```csharp
-// Example payload (depends on your PacketType definition)
-var payload = new MyCustomData { Value = 42 }; 
-var packet = Packet.Create(PacketType.MyAction, payload);
+// Define your packet data (must be MessagePack-serializable)
+public record MyData(int Value, string Name);
 
-// Server-side (send to specific client)
+var myPayload = new MyData(42, "example");
+
+// Create a packet with the server's PacketType enum
+var packet = Packet.Create(PacketType.MyAction, myPayload);
+
+// Send to all clients (e.g., for a broadcast)
+await server.SendToAllClientsAsync(packet, encrypt: true);
+
+// Or send to specific clients
 await server.SendToClientAsync(client, packet, encrypt: true);
-
-// Client-side
-await client.SendPacketAsync(packet, encrypt: true);
 ```
 
-#### Example: Sending a Custom Packet
-To send a packet, use the `SendPacketAsync` method. The `encrypt` parameter should be set based on your requirements (usually `true` for data packets).
+## Core Concepts
+
+### `Packet` and `PacketIdentifier`
+
+- **Purpose**: The fundamental unit of communication in Portly. Each packet has a type identifier and payload.
+- **When to use**: Every network message you send or receive is wrapped in a `Packet<T>`.
+- **Related APIs**: `Packet.Create()`, `Packet.As<T>()`, `Router.Register()`
+
+### `TickClock`
+
+- **Purpose**: Provides synchronized time across server and client for deterministic simulation.
+- **When to use**: If your game logic or state machine depends on consistent tick timing, access via `server.Clock`.
+- **Related APIs**: `OnTick` event, `Tick()` method (manual ticks when configured)
+
+### `Router`
+
+- **Purpose**: Registers handlers for specific packet types. Supports immediate execution or deferred processing until the next tick.
+- **When to use**: Use this to define how different message types should be handled on both server and client.
+- **Related APIs**: `PacketExecutionMode.Immediate`, `PacketExecutionMode.Tick`
+
+### Server Events
+
+| Event | Fires When |
+|-------|------------|
+| `OnServerStarted` | The transport begins accepting connections |
+| `OnServerStopped` | The server shuts down |
+| `OnClientConnected` | A new client completes the handshake |
+| `OnClientDisconnected` | A client disconnects (gracefully or forcibly) |
+| `OnPacketReceived` | Any packet arrives from a connected client |
+
+### Client Events
+
+| Event | Fires When |
+|-------|------------|
+| `OnConnected` | Handshake with server succeeded |
+| `OnDisconnected` | Connection to server closed |
+| `OnPacketReceived` | A packet was received from the server |
+
+## Usage Guide
+
+### Basic Server Lifecycle
 
 ```csharp
-// Example payload (depends on your PacketType definition)
-var payload = new MyCustomData { Value = 42 }; 
-var packet = Packet.Create(PacketType.MyAction, payload);
+var server = new PortlyServer();
 
-// Server-side (send to specific client)
-await server.SendToClientAsync(client, packet, encrypt: true);
+// Optional: customize before starting
+server.Configuration.ConnectionSettings.Port = 8080;
 
-// Client-side
-await client.SendPacketAsync(packet, encrypt: true);
+await server.StartAsync();
+
+try 
+{
+    // Your application logic runs here...
+    // Packets will be routed automatically as they arrive
+    
+    await Task.Delay(TimeSpan.FromMinutes(1));
+}
+finally 
+{
+    await server.StopAsync();
+}
 ```
+
+### Basic Client Lifecycle
+
+```csharp
+var client = new PortlyClient();
+
+await client.ConnectAsync("127.0.0.1", 8080);
+
+try 
+{
+    // Register handlers for incoming packets
+    client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
+    {
+        var data = packet.As<MyData>();
+        Console.WriteLine($"Received: {data.Value}");
+    });
+    
+    // Send packets to the server
+    var myPayload = new MyData(10);
+    await client.SendPacketAsync(Packet.Create(PacketType.MyAction, myPayload), encrypt: true);
+}
+finally 
+{
+    await client.DisconnectAsync();
+}
+```
+
+### Advanced Usage: Tick-Based Processing
+
+When `TickRate` is configured in settings (or manually via `server.Tick()`), packets can be queued for the next tick instead of processed immediately. This is useful for deterministic simulation or batching updates.
+
+```csharp
+// Register a tick-based handler
+server.Router.Register(
+    PacketType.MyAction, 
+    PacketExecutionMode.Tick,  // Defers execution until next tick
+    async (client, packet) => 
+    {
+        // This runs at the start of the next server tick
+        await HandleMyActionAsync(client, packet);
+    }
+);
+```
+
+### Sending to Specific Clients vs All Clients
+
+- **`SendToAllClientsAsync()`**: Broadcast a packet to every connected client. Use for announcements or global events.
+- **`SendToClientAsync(IServerClient)`**: Send directly to one specific client (requires you have the `IServerClient` reference, typically from an event handler).
+- **`SendToClientsAsync(...params IServerClient[])`**: Send to a subset of clients by passing multiple references.
+
+## Configuration
+
+Portly reads configuration from a JSON file located in its runtime folder (default: user's AppData or project output directory). The `ServerConfiguration` object exposes these settings:
+
+| Setting | Description |
+|---------|-------------|
+| `ConnectionSettings.Port` | TCP port the server listens on |
+| `ConnectionSettings.IpAddress` | IP address to bind (or leave empty for all interfaces) |
+| `ConnectionSettings.MaxConnections` | Maximum concurrent client connections |
+| `ConnectionSettings.MaxConnectionsPerIp` | Max connections allowed from a single IP |
+| `ConnectionSettings.TickRate` | Ticks per second (0 = disabled, uses real-time instead) |
+| `ConnectionSettings.ConnectTimeoutSeconds` | Timeout for handshake phase |
+| `KeepAliveIntervalSeconds` / `KeepAliveTimeoutSeconds` | Connection keep-alive settings |
+
+You can also set IP whitelist/blacklist to restrict which addresses may connect.
+
+## Extending the Library
+
+### Adding Custom Packet Types
+
+1. Define a new entry in `PacketType` enum (in `Portly/Protocol/PacketType.cs`)
+2. Create a record or class for your packet payload
+3. Register a handler via `Router.Register()` with your chosen execution mode
+
+Example:
+
+```csharp
+// 1. Add to PacketType enum
+public enum PacketType { /* ... */ MyCustomCommand }
+
+// 2. Define payload (must be MessagePack-serializable)
+public record MyCustomCommand(string Action, int Parameter);
+
+// 3. Register handler on server
+server.Router.Register(
+    PacketType.MyCustomCommand, 
+    PacketExecutionMode.Immediate,
+    async (client, packet) => 
+    {
+        var cmd = packet.As<MyCustomCommand>();
+        // Process command...
+    }
+);
+```
+
+### Custom Serialization Provider
+
+Portly uses MessagePack by default. To switch:
+
+1. Implement `IPacketSerializationProvider` in your project
+2. Pass it to the `PortlyServer` constructor (or configure via DI if using dependency injection)
+
+### Custom Logging
+
+Implement `ILogProvider` and pass it when constructing `PortlyServer`. All internal logging calls will use your provider instead of the default console logger.
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Handshake timed out" | Client didn't send a valid lite handshake within timeout | Increase `ConnectTimeoutSeconds` in config, or ensure client sends the required packets |
+| "IP is not whitelisted" | Server has an IP whitelist and the connecting address isn't included | Add the IP to `Configuration.IpWhitelist` before starting |
+| "Rate limit exceeded" | Too many bytes received from a single IP in the configured window | The client will be disconnected; reduce incoming traffic or adjust rate limits |
+| Packet handlers not firing | Handler wasn't registered, or packet type is reserved (system packets) | Verify `Router.Register()` was called before any packets arrive; use IDs > `_highestSystemPacketId` for custom types |
 
 ## Development
 
-- **Build**: `dotnet build -c Release`
-- **Test**: `dotnet test`
+Build and test the library:
+
+```bash
+dotnet build -c Release
+dotnet test
+```
 
 ## License
+
 See the LICENSE file for details.
