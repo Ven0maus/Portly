@@ -5,7 +5,7 @@
     namespace Portly.Utilities
     {
         /// <summary>
-        /// Container for the tick information.
+        /// Contains data about server tick.
         /// </summary>
         public sealed class TickClock
         {
@@ -20,27 +20,16 @@
 
             private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 
+            private TickClock() { }
+
             /// <summary>
             /// Constructor
             /// </summary>
             /// <param name="tickRate"></param>
             /// <exception cref="ArgumentOutOfRangeException"></exception>
-            public TickClock(double tickRate)
+            internal TickClock(double tickRate)
             {
                 Configure(tickRate);
-            }
-
-            /// <summary>
-            /// Reconfigures the tick clock.
-            /// </summary>
-            /// <param name="tickRate"></param>
-            /// <exception cref="ArgumentOutOfRangeException"></exception>
-            public void Configure(double tickRate)
-            {
-                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tickRate);
-
-                _tickRate = tickRate;
-                _tickInterval = 1.0 / tickRate;
             }
 
             /// <summary>
@@ -78,30 +67,25 @@
             public long ServerTimeOffsetMs =>
                 Interlocked.Read(ref _serverTimeOffsetMs);
 
-            /// <summary>
-            /// Used by the server tick loop.
-            /// </summary>
-            public long Advance()
+            internal void Configure(double tickRate)
+            {
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tickRate);
+
+                _tickRate = tickRate;
+                _tickInterval = 1.0 / tickRate;
+            }
+
+            internal long Advance()
             {
                 return Interlocked.Increment(ref _currentTick);
             }
 
-            /// <summary>
-            /// Overwrites the current tick.
-            /// </summary>
-            /// <param name="tick"></param>
-            public void Overwrite(long tick)
+            internal void Overwrite(long tick)
             {
                 Interlocked.Exchange(ref _currentTick, tick);
             }
 
-            /// <summary>
-            /// Used by the client when receiving ServerTickSync.
-            /// </summary>
-            /// <summary>
-            /// Used by the client when receiving ServerTickSync.
-            /// </summary>
-            public void Synchronize(long serverTick, long serverTimestampMs)
+            internal void Synchronize(long serverTick, long serverTimestampMs)
             {
                 var localTimestamp =
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
