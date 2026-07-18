@@ -58,7 +58,7 @@ server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async
 ```
 
 ## Configuration
-Configuration can be managed via `ServerConfiguration` or `ClientConfiguration` objects. Key settings include:
+Configuration can be managed via `ServerConfiguration` object. Key settings include:
 - **Connection**: Host, port, and keep-alive settings.
 - **Rate Limits**: Define thresholds for client requests.
 - **Serialization**: Choose between `JsonProvider` or `MessagePackSerializationProvider`.
