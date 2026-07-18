@@ -311,7 +311,7 @@ namespace Portly.Runtime
 
             var stopwatch = Stopwatch.StartNew();
 
-            var nextTick = stopwatch.Elapsed;
+            var nextTick = stopwatch.Elapsed + interval;
             var previousTickTime = stopwatch.Elapsed;
 
             // Telemetry
@@ -339,11 +339,17 @@ namespace Portly.Runtime
                 firstTick = false;
                 previousTickTime = tickStart;
 
+                if (token.IsCancellationRequested)
+                    break;
                 var tick = _tickClock.Advance();
 
                 if (stopwatch.Elapsed - _lastTickSync > TickSyncInterval)
                 {
                     await SendTickSyncAsync();
+
+                    if (token.IsCancellationRequested)
+                        break;
+
                     _lastTickSync = stopwatch.Elapsed;
                 }
 

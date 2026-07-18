@@ -14,7 +14,7 @@ namespace Portly.Protocol
     public sealed class PacketRouter<T>(ILogProvider? logProvider = null)
     {
         private readonly ILogProvider? _logProvider = logProvider;
-        private readonly ConcurrentDictionary<int, PacketRoute<T>> _handlers =
+        private readonly ConcurrentDictionary<int, PacketRoute<T>?> _handlers =
             new();
 
         /// <summary>
@@ -29,6 +29,7 @@ namespace Portly.Protocol
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
         /// </summary>
         /// <param name="identifier"></param>
+        /// <param name="mode"></param>
         /// <param name="handler"></param>
         public void Register(PacketIdentifier identifier, PacketExecutionMode mode, PacketHandlerBase? handler)
         {
@@ -53,6 +54,7 @@ namespace Portly.Protocol
         /// </summary>
         /// <typeparam name="TPayload"></typeparam>
         /// <param name="identifier"></param>
+        /// <param name="mode"></param>
         /// <param name="handler"></param>
         /// <exception cref="InvalidOperationException"></exception>
         public void Register<TPayload>(PacketIdentifier identifier, PacketExecutionMode mode, Func<T, TPayload, Task>? handler)
@@ -89,6 +91,7 @@ namespace Portly.Protocol
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
         /// </summary>
         /// <param name="identifier"></param>
+        /// <param name="mode"></param>
         /// <param name="handler"></param>
         public void Register(Enum identifier, PacketExecutionMode mode, PacketHandlerBase? handler)
             => Register((PacketIdentifier)identifier, mode, handler);
@@ -97,6 +100,7 @@ namespace Portly.Protocol
         /// Register a handler for a packet type, identifiers with a null handler are ignored.
         /// </summary>
         /// <param name="identifier"></param>
+        /// <param name="mode"></param>
         /// <param name="handler"></param>
         public void Register<TPayload>(Enum identifier, PacketExecutionMode mode, Func<T, TPayload, Task>? handler)
             => Register((PacketIdentifier)identifier, mode, handler);
