@@ -22,7 +22,7 @@ Portly is a lightweight, secure .NET server-client architecture designed for sma
 
 ### Server
 ```csharp
-var server = new PortlyServer("trust_data"); 
+var server = new PortlyServer();
 await server.StartAsync();
 ```
 
