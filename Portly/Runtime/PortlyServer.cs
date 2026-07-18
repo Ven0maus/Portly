@@ -10,6 +10,7 @@ using Portly.Security.Handshake;
 using Portly.Security.Trust;
 using Portly.Transport;
 using Portly.Utilities;
+using Portly.Utilities.Portly.Utilities;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
@@ -56,6 +57,10 @@ namespace Portly.Runtime
         private readonly ConcurrentQueue<QueuedPacket<IServerClient>> _simulationQueue = new();
         private Task? _tickTask;
 
+        private readonly TickClock _tickClock;
+        private readonly TimeSpan TickSyncInterval = TimeSpan.FromSeconds(1);
+
+        private TimeSpan _lastTickSync = TimeSpan.Zero;
         private TimeSpan _lastTickWarning = TimeSpan.Zero;
         private TimeSpan _lastTickTelemetry = TimeSpan.Zero;
 
@@ -114,6 +119,11 @@ namespace Portly.Runtime
         /// </summary>
         public ServerConfiguration Configuration { get; }
 
+        /// <summary>
+        /// The tick clock of the server.
+        /// </summary>
+        public TickClock Clock => _tickClock;
+
 
         internal PortlyServer(string? folder = null,
             IServerTransport? serverTransport = null,
@@ -149,6 +159,7 @@ namespace Portly.Runtime
                 async (serverClient) => await serverClient.SendPacketAsync(Packet.Create(PacketType.KeepAlive, Array.Empty<byte>()), false, _cts.Token),
                 async (serverClient) => await serverClient.DisconnectInternalAsync());
 
+            _tickClock = new TickClock(Configuration.ConnectionSettings.TickRate);
             RegisterPredefinedRoutes();
         }
 
@@ -205,6 +216,7 @@ namespace Portly.Runtime
                 FixedDeltaTime = fixedDeltaTime ?? 0,
                 ElapsedTime = elapsedTime ?? fixedDeltaTime ?? 0
             };
+            _tickClock.Overwrite(tick);
 
             await InvokeTickAsync(context);
         }
@@ -218,7 +230,14 @@ namespace Portly.Runtime
 
             foreach (TickHandler handler in OnTick.GetInvocationList().Cast<TickHandler>())
             {
-                await handler(context);
+                try
+                {
+                    await handler(context);
+                }
+                catch
+                {
+                    _logProvider?.Log($"TickHandler missfired on tick: {context.Tick}.", LogLevel.Warning);
+                }
             }
         }
 
@@ -238,6 +257,31 @@ namespace Portly.Runtime
                     _logProvider?.Log(
                         $"Error processing tick packet: {ex.Message}",
                         LogLevel.Error);
+                }
+            }
+        }
+
+        private async Task SendTickSyncAsync()
+        {
+            var packet =
+                Packet<ServerTickSyncPacket>.Create(
+                    PacketType.ServerTickSync,
+                    new ServerTickSyncPacket
+                    {
+                        Tick = _tickClock.CurrentTick,
+                        ServerTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ServerTickRate = _tickClock.TickRate
+                    });
+
+            foreach (var client in _clients.Values)
+            {
+                try
+                {
+                    await client.SendPacketAsync(packet, false, _cts.Token);
+                }
+                catch
+                {
+                    // Ignore disconnected clients
                 }
             }
         }
@@ -270,8 +314,6 @@ namespace Portly.Runtime
             var nextTick = stopwatch.Elapsed;
             var previousTickTime = stopwatch.Elapsed;
 
-            long tick = 0;
-
             // Telemetry
             long lateTicks = 0;
             long telemetryTickCount = 0;
@@ -297,7 +339,13 @@ namespace Portly.Runtime
                 firstTick = false;
                 previousTickTime = tickStart;
 
-                tick++;
+                var tick = _tickClock.Advance();
+
+                if (stopwatch.Elapsed - _lastTickSync > TickSyncInterval)
+                {
+                    await SendTickSyncAsync();
+                    _lastTickSync = stopwatch.Elapsed;
+                }
 
                 var executionStart = stopwatch.Elapsed;
 
@@ -417,7 +465,7 @@ namespace Portly.Runtime
             }
 
             _logProvider?.Log(
-                $"Tick loop stopped. Total ticks: {tick}");
+                $"Tick loop stopped. Total ticks: {_tickClock.CurrentTick}");
         }
 
         /// <summary>
@@ -565,18 +613,20 @@ namespace Portly.Runtime
             var tasks = _clients.Values.ToArray()
                 .Select(async client =>
                 {
-                    await _broadcastSemaphore.WaitAsync();
-                    try
+                    if (await _broadcastSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
                     {
-                        await client.SendPacketAsync(packet, encrypt);
-                    }
-                    catch (Exception)
-                    {
-                        try { await client.DisconnectInternalAsync(); } catch { }
-                    }
-                    finally
-                    {
-                        _broadcastSemaphore.Release();
+                        try
+                        {
+                            await client.SendPacketAsync(packet, encrypt);
+                        }
+                        catch (Exception)
+                        {
+                            try { await client.DisconnectInternalAsync(); } catch { }
+                        }
+                        finally
+                        {
+                            _broadcastSemaphore.Release();
+                        }
                     }
                 });
 
@@ -606,7 +656,15 @@ namespace Portly.Runtime
         {
             DecrementConnection(connection.IpAddress);
             _clients.Remove(connection.Id, out _);
-            OnClientDisconnected?.Invoke(sender, connection);
+
+            try
+            {
+                OnClientDisconnected?.Invoke(sender, connection);
+            }
+            catch (Exception ex)
+            {
+                _logProvider?.Log("OnClientDisconnected: " + ex.Message, LogLevel.Error);
+            }
         }
 
         private void DecrementConnection(IPAddress ip)
@@ -639,7 +697,6 @@ namespace Portly.Runtime
         private async Task HandleClientAsync(ITransportConnection client, CancellationToken serverToken)
         {
             var connection = new ServerClient(_packetProtocol.Invoke(), client, _keepAliveManager, OnClientDisconnectedImpl);
-            _clients[connection.Id] = connection;
 
             _logProvider?.Log($"[{connection.Id}]: Connecting to server..");
 
@@ -675,6 +732,8 @@ namespace Portly.Runtime
                         _logProvider?.Log($"[{connection.Id}]: Connection failed (handshake rejected).", LogLevel.Warning);
                         return;
                     }
+
+                    _clients.TryAdd(connection.Id, connection);
                 }
                 catch (Exception ex)
                 {
@@ -683,7 +742,7 @@ namespace Portly.Runtime
                     return;
                 }
 
-                _logProvider?.Log($"[{connection.Id}]: Connected sucessfully.");
+                _logProvider?.Log($"[{connection.Id}]: Connected successfully.");
 
                 // Start loops
                 var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(serverToken, connection.Cancellation.Token);
@@ -691,10 +750,12 @@ namespace Portly.Runtime
                 connection.ClientTask = Task.Run(async () =>
                 {
                     var remoteEndpoint = connection.Connection.RemoteEndPoint;
+                    var registeredIp = false;
                     try
                     {
                         // Incrmeent ip connection count
                         _connectionsPerIp.AddOrUpdate(connection.IpAddress, 1, (_, current) => current + 1);
+                        registeredIp = true;
                         // Register connection
                         _keepAliveManager.Register(connection);
 
@@ -715,6 +776,9 @@ namespace Portly.Runtime
                     finally
                     {
                         await connection.DisconnectInternalAsync();
+                        if (registeredIp)
+                            DecrementConnection(connection.IpAddress);
+
                         _clients.TryRemove(connection.Id, out _);
                         _logProvider?.Log($"[{connection.Id}]: Disconnected.", LogLevel.Info);
                     }
@@ -735,6 +799,11 @@ namespace Portly.Runtime
 
                 _logProvider?.Log($"[{connection.Id}]: Exception:", LogLevel.Error);
                 PrintException(ex);
+            }
+            finally
+            {
+                await connection.DisconnectInternalAsync();
+                _clients.TryRemove(connection.Id, out _);
             }
         }
 
@@ -877,13 +946,20 @@ namespace Portly.Runtime
             // 3. Create ECDH key exchange
             using var keyExchange = new EncryptionKeyExchange();
 
+            var handshakeTickRate = Configuration.ConnectionSettings.TickRate;
+            var handshakeTick = _tickClock.CurrentTick;
+            var handshakeTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
             // 4. Build signed data
             byte[] signedData = request.Payload.Challenge.Combine(
                 publicKey,
                 request.Payload.ClientEphemeralKey,
                 keyExchange.PublicKey,
                 request.Payload.Protocol,
-                request.Payload.ProtocolVersion
+                request.Payload.ProtocolVersion,
+                BitConverter.GetBytes(handshakeTickRate),
+                BitConverter.GetBytes(handshakeTick),
+                BitConverter.GetBytes(handshakeTimestamp)
             );
 
             // 5. Sign (binds identity + key exchange)
@@ -894,7 +970,10 @@ namespace Portly.Runtime
             {
                 ServerEphemeralKey = keyExchange.PublicKey,
                 Signature = signature,
-                ClientId = connection.Id
+                ClientId = connection.Id,
+                TickRate = handshakeTickRate,
+                CurrentTick = handshakeTick,
+                ServerTimestamp = handshakeTimestamp
             };
 
             await connection.SendPacketAsync(Packet<ServerHandshake>.Create(
@@ -920,7 +999,7 @@ namespace Portly.Runtime
                     // If banned, ban all clients with the same IP
                     foreach (var client in _clients.Values.ToArray())
                     {
-                        if (client.IpAddress == connection.IpAddress)
+                        if (client.IpAddress.Equals(connection.IpAddress))
                         {
                             await client.DisconnectAsync("Rate limit exceeded.");
                         }
@@ -934,7 +1013,16 @@ namespace Portly.Runtime
                 return;
             }
 
-            OnPacketReceived?.Invoke(connection, packet);
+            try
+            {
+                OnPacketReceived?.Invoke(connection, packet);
+            }
+            catch (Exception ex)
+            {
+                _logProvider?.Log(
+                    $"Packet event exception: {ex.Message}",
+                    LogLevel.Error);
+            }
 
             if (Router.TryGetRoute(packet, out var route) && route != null && route.Handler != null)
             {
