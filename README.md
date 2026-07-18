@@ -74,28 +74,30 @@ The client will:
 
 #### Server-side
 
-After a client connects, you can send packets using the `Router`:
+The `Router` is used to register handlers for **incoming** packets. When a client sends a packet, Portly routes it based on its type:
 
 ```csharp
-// Register a handler for a custom packet type
+// Register a handler for incoming MyAction packets
 server.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle incoming MyAction packet from this client
+    // Handle the incoming packet from this specific client
 });
 
-// Later, when a packet arrives, it will be routed automatically
+// Packets are automatically routed as they arrive - no manual sending via Router
 ```
 
 #### Client-side
 
-The client has the same router for outgoing packets:
+The client also has a `Router` for handling **incoming** packets from the server:
 
 ```csharp
 client.Router.Register(PacketType.MyAction, PacketExecutionMode.Immediate, async (client, packet) => 
 {
-    // Handle logic - typically you'd forward to the server or process locally
+    // Handle incoming MyAction packet from the server
 });
 ```
+
+To send packets to the server or other clients, use `SendPacketAsync` / `SendToClientAsync` — these methods do not go through the router.
 
 ### Creating and Sending Custom Packets
 
@@ -107,8 +109,13 @@ public record MyData(int Value, string Name);
 
 var myPayload = new MyData(42, "example");
 
-// Create a packet with the server's PacketType enum
-var packet = Packet.Create(PacketType.MyAction, myPayload);
+// Create a packet with your own PacketType enum value
+// IMPORTANT: Use an ID higher than the built-in system packets.
+// System packets are: KeepAlive, LiteHandshake, SecureHandshake, Disconnect, ServerTickSync
+// Define your custom type in your project's namespace (NOT in Portly.PacketType)
+public enum MyPacketTypes { /* ... */ CustomCommand = 100 }
+
+var packet = Packet.Create(MyPacketTypes.CustomCommand, myPayload);
 
 // Send to all clients (e.g., for a broadcast)
 await server.SendToAllClientsAsync(packet, encrypt: true);
@@ -133,8 +140,8 @@ await server.SendToClientAsync(client, packet, encrypt: true);
 
 ### `Router`
 
-- **Purpose**: Registers handlers for specific packet types. Supports immediate execution or deferred processing until the next tick.
-- **When to use**: Use this to define how different message types should be handled on both server and client.
+- **Purpose**: Routes incoming packets to registered handlers based on their type identifier. This is how Portly delivers messages from clients (to the server) and from the server (to clients).
+- **When to use**: Register handlers here for any packet types you want to receive. Do NOT use this to send packets — use `SendPacketAsync` / `SendToClientAsync` instead.
 - **Related APIs**: `PacketExecutionMode.Immediate`, `PacketExecutionMode.Tick`
 
 ### Server Events
