@@ -1,6 +1,7 @@
 using Portly.Chatbox.Forms;
 using Portly.Chatbox.Objects;
 using Portly.Chatbox.Packets;
+using Portly.Protocol;
 using Portly.Runtime;
 using System.Collections.Concurrent;
 using System.Net;
@@ -82,6 +83,25 @@ namespace Portly.Chatbox
                         else
                             UsersListBox.Items.Add(user.Username);
                     });
+                });
+
+            _server.Router.Register(ChatPacket.ChatMessage, Protocol.PacketExecutionMode.Immediate,
+                async (client, packet) =>
+                {
+                    var user = _connectedUsers.FirstOrDefault(a => a.Value.Client.Id == client.Id).Value;
+                    if (user == null) return;
+
+                    var payload = packet.As<ChatMessage>().Payload;
+                    payload.Username = user.Username;
+
+                    await ChatHistoryListBox.InvokeAsync(() =>
+                    {
+                        if (CmbChannels.SelectedItem?.ToString() == user.Channel.ToString())
+                            ChatHistoryListBox.Items.Add(payload);
+                    });
+
+                    // Distribute back to all clients
+                    await _server.SendToAllClientsAsync(Packet.Create(ChatPacket.ChatMessage, payload), true);
                 });
         }
 

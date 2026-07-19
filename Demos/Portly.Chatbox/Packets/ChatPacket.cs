@@ -6,5 +6,6 @@
         RequestLeave,
         RequestKick,
         RequestChannelChange,
+        ChatMessage
     }
 }

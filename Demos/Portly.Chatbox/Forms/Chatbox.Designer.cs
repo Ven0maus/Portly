@@ -109,6 +109,7 @@
             BtnSend.TabIndex = 7;
             BtnSend.Text = "Send";
             BtnSend.UseVisualStyleBackColor = true;
+            BtnSend.Click += BtnSend_Click;
             // 
             // Chatbox
             // 

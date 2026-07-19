@@ -47,6 +47,19 @@ namespace Portly.Chatbox
                     });
                     return Task.CompletedTask;
                 });
+
+            Client.Router.Register(ChatPacket.ChatMessage, PacketExecutionMode.Immediate,
+                (client, packet) =>
+                {
+                    var payload = packet.As<ChatMessage>().Payload;
+
+                    ChatListBox.Invoke(() =>
+                    {
+                        ChatListBox.Items.Add(payload);
+                    });
+
+                    return Task.CompletedTask;
+                });
         }
 
         private void Client_OnDisconnected(object? sender, EventArgs e)
@@ -70,6 +83,13 @@ namespace Portly.Chatbox
                     CmbChannels.SelectedItem?.ToString() ?? ChatChannel.General.ToString()),
                 false);
             UsersListBox.Items.Clear();
+        }
+
+        private async void BtnSend_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(TextInputBox.Text)) return;
+            await Client.SendPacketAsync(Packet.Create(ChatPacket.ChatMessage, new ChatMessage { Message = TextInputBox.Text }), true);
+            await InvokeAsync(() => TextInputBox.Text = string.Empty);
         }
     }
 }
