@@ -31,7 +31,6 @@
             label1 = new Label();
             UsersListBox = new ListBox();
             BtnKickUser = new Button();
-            BtnChangeChannel = new Button();
             label2 = new Label();
             CmbChannels = new ComboBox();
             label3 = new Label();
@@ -70,15 +69,7 @@
             BtnKickUser.TabIndex = 2;
             BtnKickUser.Text = "Kick user";
             BtnKickUser.UseVisualStyleBackColor = true;
-            // 
-            // BtnChangeChannel
-            // 
-            BtnChangeChannel.Location = new Point(244, 119);
-            BtnChangeChannel.Name = "BtnChangeChannel";
-            BtnChangeChannel.Size = new Size(157, 30);
-            BtnChangeChannel.TabIndex = 3;
-            BtnChangeChannel.Text = "Change user channel";
-            BtnChangeChannel.UseVisualStyleBackColor = true;
+            BtnKickUser.Click += BtnKickUser_Click;
             // 
             // label2
             // 
@@ -93,12 +84,11 @@
             // CmbChannels
             // 
             CmbChannels.FormattingEnabled = true;
-            CmbChannels.Items.AddRange(new object[] { "General", "Questions", "Off-Topic" });
             CmbChannels.Location = new Point(88, 62);
             CmbChannels.Name = "CmbChannels";
             CmbChannels.Size = new Size(150, 23);
             CmbChannels.TabIndex = 5;
-            CmbChannels.Text = "General";
+            CmbChannels.SelectedIndexChanged += CmbChannels_SelectedIndexChanged;
             // 
             // label3
             // 
@@ -194,7 +184,6 @@
             Controls.Add(label3);
             Controls.Add(CmbChannels);
             Controls.Add(label2);
-            Controls.Add(BtnChangeChannel);
             Controls.Add(BtnKickUser);
             Controls.Add(UsersListBox);
             Controls.Add(label1);
@@ -210,7 +199,6 @@
         private Label label1;
         private ListBox UsersListBox;
         private Button BtnKickUser;
-        private Button BtnChangeChannel;
         private Label label2;
         private ComboBox CmbChannels;
         private Label label3;

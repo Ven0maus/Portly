@@ -115,6 +115,10 @@ namespace Portly.Transport
         }
 
         /// <inheritdoc/>
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public async ValueTask DisposeAsync()
+        {
+            _listener?.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 }

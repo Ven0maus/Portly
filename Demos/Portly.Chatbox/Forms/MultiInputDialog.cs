@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
 
-namespace Portly.Chatbox
+namespace Portly.Chatbox.Forms
 {
     internal class MultiInputDialog : Form
     {

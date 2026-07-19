@@ -35,7 +35,7 @@ namespace Portly.Runtime
     /// This implementation establishes the foundation for secure
     /// communication by verifying server identity during the initial connection phase.
     /// </summary>
-    public class PortlyServer
+    public class PortlyServer : IAsyncDisposable
     {
         private readonly IServerTransport _serverTransport;
         private readonly TrustServer _trustServer;
@@ -535,6 +535,8 @@ namespace Portly.Runtime
         /// <returns></returns>
         public async Task StopAsync()
         {
+            if (!_serverTransport.IsRunning) return;
+
             _logProvider?.Log("Stopping server..");
             _cts.Cancel();  // stop accepting new clients
 
@@ -1152,5 +1154,14 @@ namespace Portly.Runtime
 
         private static bool IsSystemPacket(Packet packet)
             => _systemPacketIds.Contains(packet.Identifier.Id);
+
+        /// <inheritdoc/>
+        public async ValueTask DisposeAsync()
+        {
+            if (_serverTransport.IsRunning)
+                await StopAsync();
+            await _serverTransport.DisposeAsync();
+            GC.SuppressFinalize(this);
+        }
     }
 }

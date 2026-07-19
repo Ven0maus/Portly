@@ -2,6 +2,9 @@
 {
     internal enum ChatPacket
     {
-        RequestUsername = 101
+        RequestUsername = 101,
+        RequestLeave,
+        RequestKick,
+        RequestChannelChange,
     }
 }

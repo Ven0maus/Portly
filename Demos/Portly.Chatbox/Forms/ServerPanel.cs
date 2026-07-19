@@ -1,6 +1,8 @@
-using Portly.Abstractions;
+using Portly.Chatbox.Forms;
+using Portly.Chatbox.Objects;
 using Portly.Chatbox.Packets;
 using Portly.Runtime;
+using System.Collections.Concurrent;
 using System.Net;
 
 namespace Portly.Chatbox
@@ -11,7 +13,7 @@ namespace Portly.Chatbox
         private Task? _serverTask;
         private TaskCompletionSource _startedTcs = new();
 
-        private readonly Dictionary<string, IServerClient> _connectedUsers = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, User> _connectedUsers = new(StringComparer.OrdinalIgnoreCase);
 
         private int _port;
 
@@ -24,6 +26,10 @@ namespace Portly.Chatbox
         {
             _server = new PortlyServer();
             _server.OnServerStarted += Server_OnServerStarted;
+
+            foreach (var channel in Enum.GetValues<ChatChannel>())
+                CmbChannels.Items.Add(channel);
+            CmbChannels.SelectedIndex = 0;
 
             RegisterRoutes();
         }
@@ -41,11 +47,40 @@ namespace Portly.Chatbox
                     if (_connectedUsers.ContainsKey(payload))
                         return;
 
-                    _connectedUsers[payload] = client;
+                    _connectedUsers[payload] = new User(client, payload);
 
                     await UsersListBox.InvokeAsync(() =>
                     {
-                        UsersListBox.Items.Add(payload);
+                        if (((ChatChannel?)CmbChannels.SelectedItem) == ChatChannel.General)
+                            UsersListBox.Items.Add(payload);
+                    });
+                });
+
+            _server.Router.Register(ChatPacket.RequestLeave, Protocol.PacketExecutionMode.Immediate,
+                async (client, packet) =>
+                {
+                    var username = _connectedUsers.FirstOrDefault(a => a.Value.Client.Id == client.Id).Key;
+                    if (username == null) return;
+
+                    _connectedUsers.TryRemove(username, out _);
+                    await UsersListBox.InvokeAsync(() => UsersListBox.Items.Remove(username));
+                });
+
+            _server.Router.Register(ChatPacket.RequestChannelChange, Protocol.PacketExecutionMode.Immediate,
+                async (client, packet) =>
+                {
+                    var user = _connectedUsers.FirstOrDefault(a => a.Value.Client.Id == client.Id).Value;
+                    if (user == null) return;
+
+                    var channelPayload = Enum.Parse<ChatChannel>(packet.As<string>().Payload);
+                    user.Channel = channelPayload;
+
+                    await UsersListBox.InvokeAsync(() =>
+                    {
+                        if (((ChatChannel?)CmbChannels.SelectedItem) != channelPayload)
+                            UsersListBox.Items.Remove(user.Username);
+                        else
+                            UsersListBox.Items.Add(user.Username);
                     });
                 });
         }
@@ -69,6 +104,7 @@ namespace Portly.Chatbox
                 _serverTask = null;
                 LblServerStatus.Text = "Offline";
                 LblServerStatus.ForeColor = Color.Crimson;
+                BtnServerControl.Text = "Start Server";
 
                 await UsersListBox.InvokeAsync(() =>
                 {
@@ -81,6 +117,7 @@ namespace Portly.Chatbox
                 await StartAsync();
                 LblServerStatus.Text = "Online";
                 LblServerStatus.ForeColor = Color.ForestGreen;
+                BtnServerControl.Text = "Stop Server";
             }
         }
 
@@ -94,6 +131,12 @@ namespace Portly.Chatbox
 
         private void BtnConnectNewUser_Click(object sender, EventArgs e)
         {
+            if (_server == null || !_server.IsRunning)
+            {
+                MessageBox.Show("Server Offline.", "Start the server before connecting a new user.", MessageBoxButtons.OK);
+                return;
+            }
+
             // Input user name and send to chatbox
             const string lblUsername = "Select username:";
             var data = MultiInputDialog.Show(lblUsername, (lblUsername, null, null));
@@ -116,6 +159,31 @@ namespace Portly.Chatbox
             var chatbox = new Chatbox();
             chatbox.Initialize(_port, username);
             chatbox.Show();
+        }
+
+        private async void BtnKickUser_Click(object sender, EventArgs e)
+        {
+            if (UsersListBox.SelectedItem is string selectedUser &&
+                _connectedUsers.TryGetValue(selectedUser, out var user))
+            {
+                await user.Client.DisconnectAsync("Kicked by admin.");
+                _connectedUsers.TryRemove(user.Username, out _);
+                await UsersListBox.InvokeAsync(() =>
+                {
+                    UsersListBox.Items.Remove(selectedUser);
+                });
+            }
+        }
+
+        private void CmbChannels_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Show all users of the given channel
+            UsersListBox.Items.Clear();
+            foreach (var user in _connectedUsers
+                .Where(a => a.Value.Channel == (ChatChannel?)CmbChannels.SelectedItem))
+            {
+                UsersListBox.Items.Add(user.Key);
+            }
         }
     }
 }

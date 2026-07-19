@@ -30,7 +30,7 @@
         {
             label1 = new Label();
             ChatListBox = new ListBox();
-            comboBox1 = new ComboBox();
+            CmbChannels = new ComboBox();
             label2 = new Label();
             TextInputBox = new TextBox();
             UsersListBox = new ListBox();
@@ -56,13 +56,14 @@
             ChatListBox.Size = new Size(481, 439);
             ChatListBox.TabIndex = 1;
             // 
-            // comboBox1
+            // CmbChannels
             // 
-            comboBox1.FormattingEnabled = true;
-            comboBox1.Location = new Point(334, 7);
-            comboBox1.Name = "comboBox1";
-            comboBox1.Size = new Size(159, 23);
-            comboBox1.TabIndex = 2;
+            CmbChannels.FormattingEnabled = true;
+            CmbChannels.Location = new Point(334, 7);
+            CmbChannels.Name = "CmbChannels";
+            CmbChannels.Size = new Size(159, 23);
+            CmbChannels.TabIndex = 2;
+            CmbChannels.SelectedIndexChanged += CmbChannels_SelectedIndexChanged;
             // 
             // label2
             // 
@@ -119,11 +120,12 @@
             Controls.Add(UsersListBox);
             Controls.Add(TextInputBox);
             Controls.Add(label2);
-            Controls.Add(comboBox1);
+            Controls.Add(CmbChannels);
             Controls.Add(ChatListBox);
             Controls.Add(label1);
             Name = "Chatbox";
             Text = "Chatbox [Demo]";
+            FormClosing += Chatbox_FormClosing;
             ResumeLayout(false);
             PerformLayout();
         }
@@ -132,7 +134,7 @@
 
         private Label label1;
         private ListBox ChatListBox;
-        private ComboBox comboBox1;
+        private ComboBox CmbChannels;
         private Label label2;
         private TextBox TextInputBox;
         private ListBox UsersListBox;
