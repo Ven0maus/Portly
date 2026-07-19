@@ -1,3 +1,5 @@
+using Portly.Abstractions;
+using Portly.Chatbox.Packets;
 using Portly.Runtime;
 using System.Net;
 
@@ -8,6 +10,8 @@ namespace Portly.Chatbox
         private PortlyServer? _server;
         private Task? _serverTask;
         private TaskCompletionSource _startedTcs = new();
+
+        private readonly Dictionary<string, IServerClient> _connectedUsers = new(StringComparer.OrdinalIgnoreCase);
 
         private int _port;
 
@@ -20,6 +24,30 @@ namespace Portly.Chatbox
         {
             _server = new PortlyServer();
             _server.OnServerStarted += Server_OnServerStarted;
+
+            RegisterRoutes();
+        }
+
+        private void RegisterRoutes()
+        {
+            if (_server == null) return;
+
+            // Register username registration
+            _server.Router.Register(ChatPacket.RequestUsername,
+                Protocol.PacketExecutionMode.Immediate,
+                async (client, packet) =>
+                {
+                    var payload = packet.As<string>().Payload;
+                    if (_connectedUsers.ContainsKey(payload))
+                        return;
+
+                    _connectedUsers[payload] = client;
+
+                    await UsersListBox.InvokeAsync(() =>
+                    {
+                        UsersListBox.Items.Add(payload);
+                    });
+                });
         }
 
         private void Server_OnServerStarted(object? sender, EventArgs e)
@@ -41,6 +69,11 @@ namespace Portly.Chatbox
                 _serverTask = null;
                 LblServerStatus.Text = "Offline";
                 LblServerStatus.ForeColor = Color.Crimson;
+
+                await UsersListBox.InvokeAsync(() =>
+                {
+                    UsersListBox.Items.Clear();
+                });
             }
             else
             {
@@ -69,14 +102,19 @@ namespace Portly.Chatbox
             var username = data[lblUsername];
             if (string.IsNullOrWhiteSpace(username))
             {
-                MessageBox.Show("Invalid username", "Invalid username", MessageBoxButtons.OK);
+                MessageBox.Show("Invalid username.", "Invalid username.", MessageBoxButtons.OK);
                 return;
             }
 
-            // TODO: Validate with the server if username is available.
+            // Validate with the server if username is available.
+            if (_connectedUsers.ContainsKey(username))
+            {
+                MessageBox.Show("Username already taken.", "Username already taken.", MessageBoxButtons.OK);
+                return;
+            }
 
             var chatbox = new Chatbox();
-            chatbox.Initialize(_port);
+            chatbox.Initialize(_port, username);
             chatbox.Show();
         }
     }

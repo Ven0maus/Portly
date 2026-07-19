@@ -93,10 +93,12 @@
             // CmbChannels
             // 
             CmbChannels.FormattingEnabled = true;
+            CmbChannels.Items.AddRange(new object[] { "General", "Questions", "Off-Topic" });
             CmbChannels.Location = new Point(88, 62);
             CmbChannels.Name = "CmbChannels";
             CmbChannels.Size = new Size(150, 23);
             CmbChannels.TabIndex = 5;
+            CmbChannels.Text = "General";
             // 
             // label3
             // 
