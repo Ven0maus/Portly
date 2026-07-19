@@ -42,7 +42,6 @@ namespace Portly.Runtime
         private readonly ClientRateLimiter _clientRateLimiter;
         private readonly CancellationTokenSource _cts;
 
-        private readonly SemaphoreSlim _broadcastSemaphore = new(100);
         private readonly ConcurrentDictionary<Guid, ServerClient> _clients = new();
         private readonly ConcurrentDictionary<IPAddress, int> _connectionsPerIp = new();
         private static readonly HashSet<int> _systemPacketIds = [.. Enum.GetValues<PacketType>().Select(a => (int)a)];
@@ -92,6 +91,11 @@ namespace Portly.Runtime
         /// The local endpoint of the server's transport.
         /// </summary>
         public EndPoint? LocalEndpoint => _serverTransport.LocalEndPoint;
+
+        /// <summary>
+        /// Determines if the server is currently running or not.
+        /// </summary>
+        public bool IsRunning => _serverTransport.IsRunning;
 
         /// <summary>
         /// Raised when a packet is received from a client.
@@ -483,6 +487,9 @@ namespace Portly.Runtime
         /// <returns></returns>
         public Task StartAsync(IPAddress? ip = null, int? port = null)
         {
+            if (_serverTransport.IsRunning)
+                throw new Exception("This server instance is already running.");
+
             _serverTransport.OnClientAccepted += connection =>
             {
                 _ = HandleClientSafeAsync(connection, _cts.Token);

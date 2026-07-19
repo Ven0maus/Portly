@@ -1,18 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Text;
-using System.Windows.Forms;
-
-namespace Portly.Chatbox
+﻿namespace Portly.Chatbox
 {
     public partial class Chatbox : Form
     {
+        private int _port;
+
         public Chatbox()
         {
             InitializeComponent();
+        }
+
+        public void Initialize(int port)
+        {
+            _port = port;
         }
     }
 }

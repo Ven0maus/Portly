@@ -21,6 +21,9 @@ namespace Portly.Transport
         public EndPoint? LocalEndPoint { get; private set; }
 
         /// <inheritdoc/>
+        public bool IsRunning => _state == 1;
+
+        /// <inheritdoc/>
         public event Func<ITransportConnection, Task>? OnClientAccepted;
         /// <inheritdoc/>
         public event EventHandler? OnServerStarted;

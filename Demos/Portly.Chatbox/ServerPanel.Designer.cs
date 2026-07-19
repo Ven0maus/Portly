@@ -39,6 +39,9 @@
             label4 = new Label();
             ChatHistoryListBox = new ListBox();
             label5 = new Label();
+            label6 = new Label();
+            LblServerStatus = new Label();
+            BtnServerControl = new Button();
             SuspendLayout();
             // 
             // label1
@@ -113,6 +116,7 @@
             BtnConnectNewUser.TabIndex = 7;
             BtnConnectNewUser.Text = "Connect new user";
             BtnConnectNewUser.UseVisualStyleBackColor = true;
+            BtnConnectNewUser.Click += BtnConnectNewUser_Click;
             // 
             // label4
             // 
@@ -142,11 +146,45 @@
             label5.TabIndex = 10;
             label5.Text = "Chat history:";
             // 
+            // label6
+            // 
+            label6.AutoSize = true;
+            label6.Font = new Font("Segoe UI", 12F);
+            label6.Location = new Point(497, 9);
+            label6.Name = "label6";
+            label6.Size = new Size(104, 21);
+            label6.TabIndex = 11;
+            label6.Text = "Server Status:";
+            // 
+            // LblServerStatus
+            // 
+            LblServerStatus.AutoSize = true;
+            LblServerStatus.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+            LblServerStatus.ForeColor = Color.Crimson;
+            LblServerStatus.Location = new Point(515, 30);
+            LblServerStatus.Name = "LblServerStatus";
+            LblServerStatus.Size = new Size(63, 21);
+            LblServerStatus.TabIndex = 12;
+            LblServerStatus.Text = "Offline";
+            // 
+            // BtnServerControl
+            // 
+            BtnServerControl.Location = new Point(497, 57);
+            BtnServerControl.Name = "BtnServerControl";
+            BtnServerControl.Size = new Size(104, 31);
+            BtnServerControl.TabIndex = 13;
+            BtnServerControl.Text = "Start Server";
+            BtnServerControl.UseVisualStyleBackColor = true;
+            BtnServerControl.Click += BtnServerControl_Click;
+            // 
             // ServerPanel
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(613, 452);
+            Controls.Add(BtnServerControl);
+            Controls.Add(LblServerStatus);
+            Controls.Add(label6);
             Controls.Add(label5);
             Controls.Add(ChatHistoryListBox);
             Controls.Add(label4);
@@ -160,6 +198,7 @@
             Controls.Add(label1);
             Name = "ServerPanel";
             Text = "Chatbox Server Panel [Demo]";
+            Load += ServerPanel_Load;
             ResumeLayout(false);
             PerformLayout();
         }
@@ -177,5 +216,8 @@
         private Label label4;
         private ListBox ChatHistoryListBox;
         private Label label5;
+        private Label label6;
+        private Label LblServerStatus;
+        private Button BtnServerControl;
     }
 }

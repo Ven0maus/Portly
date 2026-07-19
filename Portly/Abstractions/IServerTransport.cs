@@ -26,6 +26,11 @@ namespace Portly.Abstractions
         EndPoint? LocalEndPoint { get; }
 
         /// <summary>
+        /// Determines if the server is currently running or not.
+        /// </summary>
+        bool IsRunning { get; }
+
+        /// <summary>
         /// Starts the server asynchronously.
         /// </summary>
         /// <param name="ip"></param>
